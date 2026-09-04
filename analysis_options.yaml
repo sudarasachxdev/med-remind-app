@@ -9,6 +9,15 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  # Generated output is not hand-editable, so a diagnostic in it cannot be
+  # acted on. From Story 1.4 drift_dev writes lib/data/db/*.g.dart.
+  # test/architecture_test.dart applies the same exclusions to its own walk;
+  # keep the two lists in step.
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

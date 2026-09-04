@@ -35,16 +35,74 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # State management. Riverpod 2, not 3 -- see WHY RIVERPOD 2 below.
+  # Providers are hand-written; riverpod_generator is unreachable here.
+  flutter_riverpod: 2.6.1
+
+  # Local persistence. drift_flutter pulls the platform SQLite libraries
+  # transitively; sqlite3_flutter_libs is end-of-life and must not be added.
+  drift: 2.34.3
+  drift_flutter: 0.3.1
+
+  # Reminders. Sole authority for notification permission state (AD-17) --
+  # permission_handler is deliberately not a dependency of this project.
+  flutter_local_notifications: 22.3.0
+
+  # Wall-clock time plus an IANA zone (AD-6).
+  timezone: 0.11.1
+  flutter_timezone: 5.1.0
+
+  # Navigation with named routes.
+  go_router: 18.0.0
+
+  # UUID v4 identities for medicines and schedules.
+  uuid: 4.6.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
+  # Recommended Flutter lint set, activated from analysis_options.yaml.
   flutter_lints: ^6.0.0
+
+  # Drift table/DAO code generation (AD-15 migrations, Story 1.4 onward).
+  # Drift cannot be used without it.
+  drift_dev: 2.34.6
+  build_runner: 2.15.1
+
+  # Parses lib/**.dart in test/architecture_test.dart to enforce AD-1 and AD-5.
+  # Held at 13.0.x deliberately: analyzer >=13.1.0 needs meta ^1.18.3 while the
+  # Flutter SDK pins meta 1.18.0, and drift_dev needs analyzer >=13.0.0. 13.0.x
+  # is the only window that satisfies both.
+  analyzer: ">=13.0.0 <13.1.0"
+
+  # ---------------------------------------------------------------------------
+  # WHY RIVERPOD 2, NOT 3
+  #
+  # riverpod 3.x declares `test: ^1.0.0` as a RUNTIME dependency (an upstream
+  # packaging bug). That pulls `test` into any app depending on it. The only
+  # `test` version satisfying flutter_test's SDK-pinned test_api 0.7.11 and
+  # matcher 0.12.19 is test 1.31.0, which caps analyzer below 13.
+  #
+  # No drift_dev version targets analyzer 12 -- it goes from <11.0.0 (2.31.0)
+  # straight to ^13 (2.34.x). So Riverpod 3 makes Drift's code generator
+  # unresolvable, and Drift is unusable without it.
+  #
+  # riverpod 2.6.1 has no runtime `test` dependency, which frees analyzer to
+  # 13.0.0 and makes drift_dev resolve. The cost is riverpod_generator and
+  # riverpod_lint, whose 2.x line needs analyzer ^6/^7 -- also out of reach.
+  # Generated Drift beats generated providers: Drift has no hand-written mode.
+  #
+  # Revisit when riverpod moves `test` to dev_dependencies.
+  #
+  # DELIBERATELY ABSENT:
+  #   custom_lint          -- abandoned; cannot co-resolve with riverpod_lint.
+  #   riverpod_lint        -- 2.x needs analyzer ^6/^7, 3.x needs ^13 with
+  #                           riverpod 3. Unreachable either way.
+  #   riverpod_generator   -- same constraint. Providers are hand-written.
+  #   permission_handler   -- forbidden by AD-17.
+  #   sqlite3_flutter_libs -- end-of-life; drift_flutter covers it.
+  # ---------------------------------------------------------------------------
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
