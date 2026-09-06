@@ -6,9 +6,11 @@ void main() {
 
 /// Application entry point.
 ///
-/// Deliberately minimal: the theme comes from the design token layer in Story
-/// 1.2, routing and the composition root from `lib/app/`, and the first real
-/// screen from Story 1.3. Nothing here should outlive those stories.
+/// Deliberately minimal. Story 1.2 shipped the design tokens as values only —
+/// `MTColors`, `MTTypography`, `MTRadius`, `MTSpacing` — and deliberately no
+/// theme. Building a `ThemeData` from them, along with routing and the
+/// composition root in `lib/app/`, is Story 1.3's, as is the first real screen.
+/// Nothing here should outlive those stories.
 class MediTrackerApp extends StatelessWidget {
   const MediTrackerApp({super.key});
 
