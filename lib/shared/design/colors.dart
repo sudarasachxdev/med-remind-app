@@ -69,10 +69,10 @@ abstract final class MTColors {
   static const Color inkTertiary = Color(0xFF5D5D75);
 
   /// `ink-muted` — recessive text, and the mark on a skipped dose.
-  static const Color inkMuted = Color(0xFF8A8AA0);
+  static const Color inkMuted = Color(0xFF6B6B84);
 
   /// `ink-faint` — the least emphatic readable ink.
-  static const Color inkFaint = Color(0xFF9A9AAE);
+  static const Color inkFaint = Color(0xFF6F6F8A);
 
   /// `ink-disabled` — text in a control that cannot be used.
   static const Color inkDisabled = Color(0xFFC2C2D0);
@@ -94,6 +94,14 @@ abstract final class MTColors {
   /// `accent-border` — the hairline around a selected, accent-washed control.
   static const Color accentBorder = Color(0xFFC9BFF7);
 
+  /// `accent-ink` — accent-coloured **text**, specifically on `accentWash`.
+  ///
+  /// [accent] on [accentWash] measures 4.15:1, below AA for the 12px chip text
+  /// that pairing is used for. Darkening [accent] itself would have changed
+  /// every fill, tab and toggle in the product to fix one text case, so reading
+  /// gets its own value. [accent] stays the interaction colour.
+  static const Color accentInk = Color(0xFF5B4FBE);
+
   // --- Borders --------------------------------------------------------------
   // Cards and rows are separated by fill and hairline alone; elevation is
   // reserved for the action sheet, the toast and the selected day pill.
@@ -113,16 +121,16 @@ abstract final class MTColors {
   static const Color stateTakenTile = Color(0xFFD7F2E1);
 
   /// `state-taken-mark` — the ink and `✓` of a recorded dose.
-  static const Color stateTakenMark = Color(0xFF128047);
+  static const Color stateTakenMark = Color(0xFF117A44);
 
   /// `state-taken-glyph` — the glyph drawn on a taken tile.
-  static const Color stateTakenGlyph = Color(0xFF16A34A);
+  static const Color stateTakenGlyph = Color(0xFF159845);
 
   /// `state-late-tile` — the amber fill of an overdue dose, and glyph tint 3.
   static const Color stateLateTile = Color(0xFFFBEBD5);
 
   /// `state-late-mark` — the ink and `!` of an overdue dose.
-  static const Color stateLateMark = Color(0xFFB0741C);
+  static const Color stateLateMark = Color(0xFF946118);
 
   /// `state-late-ink` — overdue body text, darker than the mark.
   static const Color stateLateInk = Color(0xFF8A5A11);

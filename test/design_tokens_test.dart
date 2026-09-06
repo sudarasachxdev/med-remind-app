@@ -124,23 +124,24 @@ const Map<String, Color> _expectedColors = {
   'inkPrimary': Color(0xFF16161D),
   'inkSecondary': Color(0xFF4A4A5E),
   'inkTertiary': Color(0xFF5D5D75),
-  'inkMuted': Color(0xFF8A8AA0),
-  'inkFaint': Color(0xFF9A9AAE),
+  'inkMuted': Color(0xFF6B6B84),
+  'inkFaint': Color(0xFF6F6F8A),
   'inkDisabled': Color(0xFFC2C2D0),
   // accent-*
   'accent': Color(0xFF6C5CE7),
   'accentPressed': Color(0xFF5A48DE),
   'accentWash': Color(0xFFEEEBFE),
   'accentBorder': Color(0xFFC9BFF7),
+  'accentInk': Color(0xFF5B4FBE),
   // border-*
   'borderHairline': Color(0xFFEDECF5),
   'borderStrong': Color(0xFFE4E3EF),
   // state-*
   'stateTakenTile': Color(0xFFD7F2E1),
-  'stateTakenMark': Color(0xFF128047),
-  'stateTakenGlyph': Color(0xFF16A34A),
+  'stateTakenMark': Color(0xFF117A44),
+  'stateTakenGlyph': Color(0xFF159845),
   'stateLateTile': Color(0xFFFBEBD5),
-  'stateLateMark': Color(0xFFB0741C),
+  'stateLateMark': Color(0xFF946118),
   'stateLateInk': Color(0xFF8A5A11),
   'stateLateGlyph': Color(0xFFC97C1B),
   'stateInfoTile': Color(0xFFDCEBFB),
@@ -224,6 +225,7 @@ const Map<String, Color> _actualColors = {
   'accentPressed': MTColors.accentPressed,
   'accentWash': MTColors.accentWash,
   'accentBorder': MTColors.accentBorder,
+  'accentInk': MTColors.accentInk,
   'borderHairline': MTColors.borderHairline,
   'borderStrong': MTColors.borderStrong,
   'stateTakenTile': MTColors.stateTakenTile,
@@ -240,6 +242,36 @@ const Map<String, Color> _actualColors = {
   'stateDangerSurfacePressed': MTColors.stateDangerSurfacePressed,
   'stateDangerInk': MTColors.stateDangerInk,
 };
+
+
+/// Every pairing in the product where the foreground carries meaning.
+///
+/// Text needs 4.5:1. A glyph carries meaning without being read, so WCAG 1.4.11
+/// asks 3:1. Chip text is 12px/600, which is NOT "large" by 1.4.3 — large is
+/// 18pt, or 14pt bold — so 4.5 applies to it.
+///
+/// `inkDisabled` is deliberately absent. WCAG exempts inactive controls, and an
+/// unavailable Continue button should look unavailable.
+///
+/// Add a row whenever a story introduces a new ink-on-surface pairing. A pair
+/// that is not listed here is not checked, so this list is the contract.
+const List<(String, String, double, String)> _contrastPairs = [
+  ('stateTakenMark', 'stateTakenTile', 4.5, '"Taken" chip word'),
+  ('stateLateMark', 'stateLateTile', 4.5, '"Overdue" / "Taken late" chip word'),
+  ('stateLateInk', 'stateLateTile', 4.5, 'Late heading ink'),
+  ('inkMuted', 'stateNeutralTile', 4.5, '"Skipped" chip word'),
+  ('inkMuted', 'surfaceApp', 4.5, 'Dose metadata on the page'),
+  ('inkMuted', 'surfaceRaised', 4.5, 'Dose metadata on a card'),
+  ('inkFaint', 'surfaceApp', 4.5, 'ALL-CAPS labels and time dividers'),
+  ('inkTertiary', 'surfaceApp', 4.5, 'Tertiary ink on the page'),
+  ('inkSecondary', 'surfaceApp', 4.5, 'Secondary ink on the page'),
+  ('inkPrimary', 'surfaceApp', 4.5, 'Primary ink on the page'),
+  ('accentInk', 'accentWash', 4.5, 'Accent text on its wash'),
+  ('accent', 'surfaceApp', 4.5, 'Accent text on the page'),
+  ('stateDangerInk', 'stateDangerSurface', 4.5, 'Delete medicine text'),
+  ('stateTakenGlyph', 'stateTakenTile', 3.0, 'Taken glyph (non-text)'),
+  ('stateInfoGlyph', 'stateInfoTile', 3.0, 'Info glyph (non-text)'),
+];
 
 const Map<String, TextStyle> _actualTypography = {
   'display': MTTypography.display,
@@ -280,7 +312,7 @@ void main() {
     test('all 30 declared colours exist with the declared value', () {
       // A count is a deliberate pause, not brittleness — see the typography
       // group for the full reasoning. Bump it when you mean to.
-      expect(_expectedColors, hasLength(30));
+      expect(_expectedColors, hasLength(31));
 
       for (final entry in _expectedColors.entries) {
         expect(
@@ -456,7 +488,7 @@ void main() {
       }
 
       final frontmatter = _frontmatterLines(file);
-      expect(_flatBlock(frontmatter, 'colors'), hasLength(30));
+      expect(_flatBlock(frontmatter, 'colors'), hasLength(31));
       expect(_flatBlock(frontmatter, 'rounded'), hasLength(6));
       expect(_flatBlock(frontmatter, 'spacing'), hasLength(7));
       expect(_nestedBlock(frontmatter, 'typography'), hasLength(12));
@@ -894,6 +926,54 @@ void main() {
       }
     });
   });
+
+  group('contrast (NFR-5, WCAG 2.1 AA)', () {
+    // The design's governing accessibility rule is that Dose State is never
+    // communicated by colour alone: every state carries a word and a mark. That
+    // only holds while the word is readable. On 2026-09-06 the "Overdue" word
+    // sat at 3.35:1 on its amber tile and "Skipped" at 2.95:1, so in daylight
+    // the word faded at the same time as the colour and the redundant signal
+    // was not redundant at all. Six inks were darkened; the tiles did not move.
+    test('every meaning-carrying pair clears its bar', () {
+      final failures = <String>[];
+      for (final (fg, bg, required, label) in _contrastPairs) {
+        final f = _actualColors[fg];
+        final b = _actualColors[bg];
+        expect(f, isNotNull, reason: '_contrastPairs names unknown token $fg');
+        expect(b, isNotNull, reason: '_contrastPairs names unknown token $bg');
+        final r = _contrastRatio(f!, b!);
+        if (r < required) {
+          failures.add(
+            '$label: $fg on $bg is ${r.toStringAsFixed(2)}:1, '
+            'needs ${required.toStringAsFixed(1)}:1',
+          );
+        }
+      }
+      expect(
+        failures,
+        isEmpty,
+        reason:
+            'Contrast failures (${failures.length}):\n${failures.join('\n')}\n'
+            'Darken the ink, never lighten the tile: the tiles carry the '
+            "design's soft register and the ink carries the meaning.",
+      );
+    });
+
+    test('the ratio calculation is right, checked against known values', () {
+      expect(
+        _contrastRatio(const Color(0xFF000000), const Color(0xFFFFFFFF)),
+        closeTo(21.0, 0.01),
+      );
+      expect(
+        _contrastRatio(MTColors.accent, MTColors.accent),
+        closeTo(1.0, 0.001),
+      );
+      expect(
+        _contrastRatio(MTColors.stateLateMark, MTColors.stateLateTile),
+        greaterThan(4.5),
+      );
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1286,6 +1366,8 @@ double _hueDegrees(Color color) {
     hue = 60 * (((r - g) / delta) + 4);
   }
   return hue < 0 ? hue + 360 : hue;
+
+
 }
 
 /// WCAG relative luminance: sRGB channels linearised, then weighted for how
@@ -1303,3 +1385,13 @@ double _relativeLuminance(Color color) =>
 double _linearise(double channel) => channel <= 0.04045
     ? channel / 12.92
     : math.pow((channel + 0.055) / 1.055, 2.4).toDouble();
+
+/// WCAG contrast ratio between two opaque colours, `(Lhi + 0.05) / (Llo + 0.05)`.
+///
+/// Order-independent, so a pair can be written foreground-first without
+/// anyone having to remember which way round it goes.
+double _contrastRatio(Color a, Color b) {
+  final la = _relativeLuminance(a);
+  final lb = _relativeLuminance(b);
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+}
