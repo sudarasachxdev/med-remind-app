@@ -468,15 +468,18 @@ void main() {
       expect(violations.single, contains('AD-1'));
     });
 
-    test('package:meta, relative imports and pure dart: libraries are fine', () {
-      expect(check("import 'package:meta/meta.dart';"), isEmpty);
-      expect(check("import 'y.dart';"), isEmpty);
-      expect(check("import '../model/dose.dart';"), isEmpty);
-      expect(check("import 'dart:async';"), isEmpty);
-      expect(check("import 'dart:math';"), isEmpty);
-      expect(check("import 'dart:collection';"), isEmpty);
-      expect(check("import 'dart:convert';"), isEmpty);
-    });
+    test(
+      'package:meta, relative imports and pure dart: libraries are fine',
+      () {
+        expect(check("import 'package:meta/meta.dart';"), isEmpty);
+        expect(check("import 'y.dart';"), isEmpty);
+        expect(check("import '../model/dose.dart';"), isEmpty);
+        expect(check("import 'dart:async';"), isEmpty);
+        expect(check("import 'dart:math';"), isEmpty);
+        expect(check("import 'dart:collection';"), isEmpty);
+        expect(check("import 'dart:convert';"), isEmpty);
+      },
+    );
 
     test('every violation in one file is reported, not just the first', () {
       expect(
@@ -595,14 +598,17 @@ void main() {
       expect(check(r"final s = 'DateTime.now';"), isEmpty);
     });
 
-    test('an injected clock and unrelated DateTime members are not violations', () {
-      expect(check('clock.now();'), isEmpty);
-      expect(check('final g = clock.now;'), isEmpty);
-      expect(check('final g = settings.timestamp;'), isEmpty);
-      expect(check("DateTime.parse('2026-01-05');"), isEmpty);
-      expect(check('final f = DateTime.parse;'), isEmpty);
-      expect(check('DateTime(2026, 1, 5);'), isEmpty);
-    });
+    test(
+      'an injected clock and unrelated DateTime members are not violations',
+      () {
+        expect(check('clock.now();'), isEmpty);
+        expect(check('final g = clock.now;'), isEmpty);
+        expect(check('final g = settings.timestamp;'), isEmpty);
+        expect(check("DateTime.parse('2026-01-05');"), isEmpty);
+        expect(check('final f = DateTime.parse;'), isEmpty);
+        expect(check('DateTime(2026, 1, 5);'), isEmpty);
+      },
+    );
 
     test('the rule applies outside the domain too', () {
       expect(
@@ -671,29 +677,38 @@ void main() {
       }
     });
 
-    test('every route to a colour is caught, not only the ones spelled Color', () {
-      // The demonstrated gap: a violet arrived at through HSL is still a
-      // violet, and named neither Color nor Colors.
-      for (final expression in [
-        'HSLColor.fromAHSL(1, 260, 0.7, 0.6).toColor()',
-        'HSVColor.fromAHSV(1, 260, 0.7, 0.6).toColor()',
-        'CupertinoColors.systemRed',
-        'CupertinoColors.systemIndigo.withValues(alpha: 0.5)',
-        'MaterialColor(0xFF6C5CE7, const {})',
-        'const ColorSwatch(0xFF6C5CE7, {})',
-        'const MaterialColor(0xFF6C5CE7, {})',
-      ]) {
-        expect(
-          check('final c = $expression;'),
-          hasLength(1),
-          reason: '$expression should be one violation',
-        );
-      }
+    test(
+      'every route to a colour is caught, not only the ones spelled Color',
+      () {
+        // The demonstrated gap: a violet arrived at through HSL is still a
+        // violet, and named neither Color nor Colors.
+        for (final expression in [
+          'HSLColor.fromAHSL(1, 260, 0.7, 0.6).toColor()',
+          'HSVColor.fromAHSV(1, 260, 0.7, 0.6).toColor()',
+          'CupertinoColors.systemRed',
+          'CupertinoColors.systemIndigo.withValues(alpha: 0.5)',
+          'MaterialColor(0xFF6C5CE7, const {})',
+          'const ColorSwatch(0xFF6C5CE7, {})',
+          'const MaterialColor(0xFF6C5CE7, {})',
+        ]) {
+          expect(
+            check('final c = $expression;'),
+            hasLength(1),
+            reason: '$expression should be one violation',
+          );
+        }
 
-      // The shorthand forms of the same, which carry no class name at all.
-      expect(check('HSLColor c = .fromAHSL(1, 260, 0.7, 0.6);'), hasLength(1));
-      expect(check('HSVColor c = .fromAHSV(1, 260, 0.7, 0.6);'), hasLength(1));
-    });
+        // The shorthand forms of the same, which carry no class name at all.
+        expect(
+          check('HSLColor c = .fromAHSL(1, 260, 0.7, 0.6);'),
+          hasLength(1),
+        );
+        expect(
+          check('HSVColor c = .fromAHSV(1, 260, 0.7, 0.6);'),
+          hasLength(1),
+        );
+      },
+    );
 
     test('an ambiguous dot shorthand is left alone', () {
       // `.from` is Color.from, and equally List.from, Set.from and Map.from.
@@ -703,18 +718,24 @@ void main() {
       expect(check('List<int> s = .from([1, 2]);'), isEmpty);
     });
 
-    test("Flutter's palette is a violation — the palette is the token layer's job", () {
-      expect(check('final c = Colors.red;').single, contains('Colors.red'));
-      expect(check('final c = Colors.amber;').single, contains('Colors.amber'));
-      expect(
-        check('final c = material.Colors.red;').single,
-        contains('Colors.red'),
-      );
-      expect(
-        check('final c = CupertinoColors.label;').single,
-        contains('CupertinoColors.label'),
-      );
-    });
+    test(
+      "Flutter's palette is a violation — the palette is the token layer's job",
+      () {
+        expect(check('final c = Colors.red;').single, contains('Colors.red'));
+        expect(
+          check('final c = Colors.amber;').single,
+          contains('Colors.amber'),
+        );
+        expect(
+          check('final c = material.Colors.red;').single,
+          contains('Colors.red'),
+        );
+        expect(
+          check('final c = CupertinoColors.label;').single,
+          contains('CupertinoColors.label'),
+        );
+      },
+    );
 
     test('a palette shade is reported once, not once per node kind', () {
       final violations = check('final c = Colors.red.shade400;');
@@ -731,7 +752,10 @@ void main() {
 
     test('Colors.transparent carries no brand decision and is allowed', () {
       expect(check('final c = Colors.transparent;'), isEmpty);
-      expect(check('final c = Colors.transparent.withValues(alpha: 0);'), isEmpty);
+      expect(
+        check('final c = Colors.transparent.withValues(alpha: 0);'),
+        isEmpty,
+      );
     });
 
     test('a named token constant is the point of the rule and is allowed', () {
@@ -740,7 +764,10 @@ void main() {
       // Nothing about a non-colour API is caught by the prefix check.
       expect(check('final c = theme.colorScheme;'), isEmpty);
       expect(check('final c = Color.lerp(MTColors.accent, b, t);'), isEmpty);
-      expect(check('final c = MTColors.accent.withValues(alpha: 0.5);'), isEmpty);
+      expect(
+        check('final c = MTColors.accent.withValues(alpha: 0.5);'),
+        isEmpty,
+      );
     });
 
     test('a colour in a comment or a string is not a violation', () {
@@ -762,7 +789,8 @@ void main() {
     });
 
     test('the token layer itself may name colours', () {
-      const source = 'const a = Color(0xFF6C5CE7);\n'
+      const source =
+          'const a = Color(0xFF6C5CE7);\n'
           'const b = Color.fromARGB(255, 255, 255, 255);\n'
           'const c = Colors.red;';
 
@@ -833,7 +861,10 @@ void main() {
       }
 
       // One violation per literal, so a four-sided inset names all four.
-      expect(check('final x = const EdgeInsets.fromLTRB(4, 8, 12, 16);'), hasLength(4));
+      expect(
+        check('final x = const EdgeInsets.fromLTRB(4, 8, 12, 16);'),
+        hasLength(4),
+      );
     });
 
     test('a scale value taken from the token layer is allowed', () {
@@ -859,7 +890,9 @@ void main() {
       expect(check('final x = const EdgeInsets.only(top: 0);'), isEmpty);
       expect(check('final x = EdgeInsets.all(0);'), isEmpty);
       expect(
-        check('final x = const EdgeInsets.symmetric(horizontal: 16, vertical: 0);'),
+        check(
+          'final x = const EdgeInsets.symmetric(horizontal: 16, vertical: 0);',
+        ),
         hasLength(1),
       );
     });
@@ -906,7 +939,9 @@ void main() {
 
     test('the real typography.dart would be a violation anywhere else', () {
       _expectPackageRoot();
-      final source = File('lib/shared/design/typography.dart').readAsStringSync();
+      final source = File(
+        'lib/shared/design/typography.dart',
+      ).readAsStringSync();
 
       expect(
         architectureViolationsForSource(
@@ -996,7 +1031,9 @@ void main() {
 
     test('normalises backslashes', () {
       expect(
-        packageRelativePath(r'C:\dev\med_remind_app\lib\domain\model\dose.dart'),
+        packageRelativePath(
+          r'C:\dev\med_remind_app\lib\domain\model\dose.dart',
+        ),
         'lib/domain/model/dose.dart',
       );
     });
@@ -1021,10 +1058,7 @@ void main() {
     }
 
     test('applies each rule to the layer it governs', () {
-      write(
-        'lib/domain/model/dose.dart',
-        "import 'package:drift/drift.dart';",
-      );
+      write('lib/domain/model/dose.dart', "import 'package:drift/drift.dart';");
       write(
         'lib/platform/clock/system_clock.dart',
         'class SystemClock {\n  DateTime now() => DateTime.now();\n}',
@@ -1056,7 +1090,7 @@ void main() {
       write(
         'lib/domain/model/dose.freezed.dart',
         "import 'package:flutter/material.dart';\n"
-        'void f() { DateTime.now(); }',
+            'void f() { DateTime.now(); }',
       );
       write('lib/domain/model/dose.dart', 'class Dose {}');
 
@@ -1195,42 +1229,45 @@ void main() {
       );
     });
 
-    test('domain/, data/ and platform/ hold exactly their spine subdirectories', () {
-      // The closure runs ALL THE WAY DOWN: lib/domain/model/ may hold files,
-      // but not further directories. Reported as full paths rather than as a
-      // set difference, so a nested lib/domain/model/value/ is named as itself
-      // and not as a phantom subdirectory called `model/value`.
-      _expectPackageRoot();
-      final directories = _directoriesUnderLib();
+    test(
+      'domain/, data/ and platform/ hold exactly their spine subdirectories',
+      () {
+        // The closure runs ALL THE WAY DOWN: lib/domain/model/ may hold files,
+        // but not further directories. Reported as full paths rather than as a
+        // set difference, so a nested lib/domain/model/value/ is named as itself
+        // and not as a phantom subdirectory called `model/value`.
+        _expectPackageRoot();
+        final directories = _directoriesUnderLib();
 
-      for (final layer in _closedLayerSubdirectories.entries) {
-        final descendants = directories
-            .where((path) => path.startsWith('${layer.key}/'))
-            .map((path) => path.substring(layer.key.length + 1));
+        for (final layer in _closedLayerSubdirectories.entries) {
+          final descendants = directories
+              .where((path) => path.startsWith('${layer.key}/'))
+              .map((path) => path.substring(layer.key.length + 1));
 
-        final unexpected = descendants
-            .where(
-              (path) => path.contains('/') || !layer.value.contains(path),
-            )
-            .map((path) => 'lib/${layer.key}/$path')
-            .toList();
+          final unexpected = descendants
+              .where(
+                (path) => path.contains('/') || !layer.value.contains(path),
+              )
+              .map((path) => 'lib/${layer.key}/$path')
+              .toList();
 
-        expect(
-          unexpected,
-          isEmpty,
-          reason:
-              'lib/${layer.key}/ is a closed set, and closed at every depth: '
-              'it holds exactly ${layer.value.join(', ')} and no directory '
-              'inside those. A new one is a new architectural concept and '
-              'needs a decision, not a commit. Found: ${unexpected.join(', ')}',
-        );
+          expect(
+            unexpected,
+            isEmpty,
+            reason:
+                'lib/${layer.key}/ is a closed set, and closed at every depth: '
+                'it holds exactly ${layer.value.join(', ')} and no directory '
+                'inside those. A new one is a new architectural concept and '
+                'needs a decision, not a commit. Found: ${unexpected.join(', ')}',
+          );
 
-        final missing = layer.value
-            .where((name) => !directories.contains('${layer.key}/$name'))
-            .toList();
-        expect(missing, isEmpty, reason: 'missing: ${missing.join(', ')}');
-      }
-    });
+          final missing = layer.value
+              .where((name) => !directories.contains('${layer.key}/$name'))
+              .toList();
+          expect(missing, isEmpty, reason: 'missing: ${missing.join(', ')}');
+        }
+      },
+    );
 
     test('features/ and shared/ may grow freely', () {
       // The other half of the rule, pinned so it cannot be quietly reversed by

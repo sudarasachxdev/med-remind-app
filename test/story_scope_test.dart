@@ -6,11 +6,16 @@
 // day someone wires a permission request into panel 3. So this one reads the
 // source tree.
 //
-// It is a scope guard, not a style rule. Each entry below is a thing Story 1.3
-// promised not to do, and each will be DELETED by the story that is allowed to
-// do it: the notification and permission entries by Story 3.1, the table entry
-// by Story 1.4. A failure here is either a scope leak or a stale guard, and the
+// It is a scope guard, not a style rule. Each entry below is a thing the
+// current story promised not to do, and each is DELETED by the story that is
+// allowed to do it -- the notification and permission entries by Story 3.1.
+// Story 1.4 removed `Medicines` and `Schedules` from the forbidden-table list
+// because Story 1.4 is the story that builds them; `Doses` stays, and Story 1.7
+// removes it. A failure here is either a scope leak or a stale guard, and the
 // message says which of the two to check.
+//
+// Story 1.4's own absences are here too: no widget, no provider and no
+// `doses` table. This story ends at the port.
 
 import 'dart:io';
 
@@ -48,12 +53,89 @@ const Map<String, String> _forbiddenIdentifiers = <String, String>{
       'shows the explainer and both of its actions go to Home.',
 };
 
-/// Table names Story 1.3 must not create. Stories 1.4 and 1.7 own them.
-const List<String> _forbiddenTables = <String>[
-  'Medicines',
-  'Schedules',
-  'Doses',
-];
+/// Table names this story must not create. Story 1.7 owns the one that is left.
+///
+/// `Medicines` and `Schedules` were here through Story 1.3 and were removed by
+/// Story 1.4, which builds them. `Doses` cannot arrive yet even in principle:
+/// generating doses needs the escalation policy Story 1.6 has not written, and
+/// AD-16 freezes that policy onto the row at generation -- a `doses` table
+/// built before the policy exists would have to be migrated the moment it did.
+const List<String> _forbiddenTables = <String>['Doses'];
+
+/// Directories this story must not add code to, mapped to the story that may.
+///
+/// Story 1.4 ends at the port: the repository is reachable from the domain, and
+/// nothing renders it. A widget or a provider added here would be Story 1.5's
+/// work landing early, without Story 1.5's design review.
+const Map<String, String> _directoriesThisStoryDoesNotOwn = <String, String>{
+  'lib/features/medicines':
+      'Story 1.5 owns the add-medicine flow. This story ends at the port.',
+};
+
+/// Files that must not appear, with the reason.
+///
+/// The no-provider half of this story's scope was guarded by looking in
+/// `lib/features/medicines` -- but every provider in this project lives in
+/// `lib/app/`, so a `medicineRepositoryProvider` added there passed a test
+/// whose name said no provider was added.
+const Map<String, String> _providerHomes = <String, String>{
+  'lib/app':
+      'This story ends at the port. Wiring the repository into the '
+      'composition root is Story 1.5, which is also the first story with a '
+      'caller for it.',
+};
+
+/// Identifiers that must not appear in a domain model file, by file.
+///
+/// AD-6 is the product's keystone: a Schedule stores a wall-clock time and an
+/// IANA zone, and **never** a UTC instant. "Every day at 8:00" keeps its plain
+/// meaning across a DST transition only while 8:00 is what was stored; an
+/// instant computed once at creation drifts by an hour twice a year, which is
+/// the failure class the PRD found in competitor app-store reviews.
+///
+/// This rule exists because the test that named the invariant did not check
+/// it. `domain_model_test`'s "exposes no instant, offset or UTC value at all"
+/// asserted on `Schedule.toString()`, which is hand-written over four fields --
+/// so adding `DateTime get scheduledUtc => DateTime.utc(...)` to the class
+/// passed all 324 tests. A claim about a type's surface has to observe the
+/// surface, not a rendering of four of its fields.
+final Map<String, List<({RegExp pattern, String reason})>>
+_forbiddenInDomainModel = <String, List<({RegExp pattern, String reason})>>{
+  'lib/domain/model/schedule.dart': <({RegExp pattern, String reason})>[
+    // `DateTime` is banned as a type and as an instant, but NOT as the
+    // weekday constants. `DateTime.monday` through `DateTime.sunday` are
+    // plain integers 1..7 -- the idiomatic Dart names for days of the week
+    // -- and a Schedule's day set is exactly that. Banning the bare token
+    // would have failed the real file for the one use that is not an
+    // instant, which is how a rule gets deleted instead of narrowed.
+    (
+      pattern: RegExp(
+        r'DateTime(?!\.(monday|tuesday|wednesday|thursday|friday'
+        r'|saturday|sunday)\b)',
+      ),
+      reason:
+          'AD-6: a Schedule holds a wall clock and a zone. A DateTime '
+          'here is an instant, however it is spelled. Only the weekday '
+          'constants are permitted.',
+    ),
+    (
+      pattern: RegExp('utc', caseSensitive: false),
+      reason: 'AD-6: no UTC value on the type, precomputed or derived.',
+    ),
+    (
+      pattern: RegExp('epoch', caseSensitive: false),
+      reason: 'AD-6: no epoch value.',
+    ),
+    (
+      pattern: RegExp('instant', caseSensitive: false),
+      reason: 'AD-6: no instant.',
+    ),
+    (
+      pattern: RegExp('offset', caseSensitive: false),
+      reason: 'AD-6: an offset is a zone flattened into a number.',
+    ),
+  ],
+};
 
 void main() {
   late List<({String path, String source})> sources;
@@ -94,6 +176,59 @@ void main() {
           isNot(contains(entry.key)),
           reason: '${file.path} names ${entry.key}. ${entry.value}',
         );
+      }
+    }
+  });
+
+  test('the domain model exposes no instant, offset or UTC value (AD-6)', () {
+    for (final MapEntry<String, List<({RegExp pattern, String reason})>> file
+        in _forbiddenInDomainModel.entries) {
+      final File source = File(file.key);
+      expect(
+        source.existsSync(),
+        isTrue,
+        reason:
+            '${file.key} does not exist, so this rule guards nothing. A guard '
+            'that cannot find its target passes for the wrong reason.',
+      );
+      final String code = _withoutComments(source.readAsStringSync());
+      for (final ({RegExp pattern, String reason}) banned in file.value) {
+        final RegExpMatch? hit = banned.pattern.firstMatch(code);
+        expect(
+          hit,
+          isNull,
+          reason: '${file.key} contains "${hit?.group(0)}". ${banned.reason}',
+        );
+      }
+    }
+  });
+
+  test('the repository is not wired into the composition root yet', () {
+    for (final MapEntry<String, String> home in _providerHomes.entries) {
+      final Directory directory = Directory(home.key);
+      expect(
+        directory.existsSync(),
+        isTrue,
+        reason:
+            '${home.key} does not exist, so this guard is vacuous. Every '
+            'provider in this project lives there.',
+      );
+      for (final File file
+          in directory
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((File f) => f.path.endsWith('.dart'))) {
+        final String code = _withoutComments(file.readAsStringSync());
+        for (final String named in <String>[
+          'MedicineRepository',
+          'DriftMedicineRepository',
+        ]) {
+          expect(
+            code,
+            isNot(contains(named)),
+            reason: '${file.path} names $named. ${home.value}',
+          );
+        }
       }
     }
   });
@@ -142,7 +277,7 @@ void main() {
     }
   });
 
-  test('no medicine, schedule or dose table is declared', () {
+  test('no dose table is declared', () {
     // The database test asserts the schema SQLite actually creates. This
     // asserts the Dart, so a table declared but not yet wired into
     // @DriftDatabase is caught too.
@@ -153,11 +288,104 @@ void main() {
           code,
           isNot(contains('class $table extends Table')),
           reason:
-              '${file.path} declares $table. Story 1.4 owns Medicine and '
-              'Schedule; Story 1.7 owns Dose.',
+              '${file.path} declares $table. Story 1.7 owns Dose, and it '
+              'needs the escalation policy Story 1.6 has not written yet.',
         );
       }
     }
+  });
+
+  test('this story added no widget and no provider', () {
+    // Two of Story 1.4's acceptance criteria are absences, and the storage
+    // layer is exactly where a "just to see it work" screen appears. The port
+    // and its adapter are testable without one.
+    for (final MapEntry<String, String> entry
+        in _directoriesThisStoryDoesNotOwn.entries) {
+      final Directory directory = Directory(entry.key);
+      if (!directory.existsSync()) continue;
+
+      final List<String> dartFiles = directory
+          .listSync(recursive: true, followLinks: false)
+          .whereType<File>()
+          .map((File f) => f.path)
+          .where((String p) => p.endsWith('.dart'))
+          .toList();
+
+      expect(
+        dartFiles,
+        isEmpty,
+        reason: '${entry.key}: ${entry.value} Found: ${dartFiles.join(', ')}',
+      );
+    }
+
+    // And nothing under data/ or domain/ reaches for Riverpod or Flutter --
+    // the two imports a provider or a widget would need.
+    for (final ({String path, String source}) file in sources) {
+      if (!file.path.startsWith('lib/data/') &&
+          !file.path.startsWith('lib/domain/')) {
+        continue;
+      }
+      final String code = _withoutComments(file.source);
+      for (final String banned in const <String>[
+        'package:flutter_riverpod/',
+        'package:flutter/',
+      ]) {
+        expect(
+          code,
+          isNot(contains(banned)),
+          reason:
+              '${file.path} imports $banned. Providers carry state and never '
+              'rules (AD-13), and a repository is not something a widget '
+              'touches.',
+        );
+      }
+    }
+  });
+
+  test('no DAO or second write path to schedules is exposed', () {
+    // AD-12: `MedicineRepository` is the only path that creates, edits or
+    // deletes a Schedule. A `DatabaseAccessor`/`@DriftAccessor` would be a
+    // second one, with its own copy of the duplicate-schedule rule and the
+    // delete cascade -- and one of the two copies would be the one that is
+    // wrong.
+    for (final ({String path, String source}) file in sources) {
+      final String code = _withoutComments(file.source);
+      for (final String banned in const <String>[
+        'DriftAccessor',
+        'DatabaseAccessor',
+      ]) {
+        expect(
+          code,
+          isNot(contains(banned)),
+          reason:
+              '${file.path} declares $banned. AD-12: Medicine is the '
+              'aggregate root and its repository is the only write path.',
+        );
+      }
+    }
+  });
+
+  test('the medicine port is pure Dart, like the onboarding one', () {
+    const String path = 'lib/domain/port/medicine_repository.dart';
+    expect(File(path).existsSync(), isTrue);
+
+    final String code = _withoutComments(File(path).readAsStringSync());
+
+    // AD-1 in general is enforced by architecture_test.dart, which allows
+    // package:meta and any relative import. This port needs neither Drift nor
+    // meta: its only imports are the sibling models it names.
+    expect(
+      code,
+      isNot(contains('package:')),
+      reason:
+          'The domain must not know a Medicine is a row. Every import in this '
+          'file is a relative one to a sibling model.',
+    );
+    expect(
+      code,
+      contains('abstract interface class MedicineRepository'),
+      reason: 'the port is an interface, not a class with an implementation',
+    );
   });
 
   test('the domain port imports nothing at all', () {
