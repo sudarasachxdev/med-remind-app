@@ -243,7 +243,6 @@ const Map<String, Color> _actualColors = {
   'stateDangerInk': MTColors.stateDangerInk,
 };
 
-
 /// Every pairing in the product where the foreground carries meaning.
 ///
 /// Text needs 4.5:1. A glyph carries meaning without being read, so WCAG 1.4.11
@@ -271,6 +270,31 @@ const List<(String, String, double, String)> _contrastPairs = [
   ('stateDangerInk', 'stateDangerSurface', 4.5, 'Delete medicine text'),
   ('stateTakenGlyph', 'stateTakenTile', 3.0, 'Taken glyph (non-text)'),
   ('stateInfoGlyph', 'stateInfoTile', 3.0, 'Info glyph (non-text)'),
+  // Added by Story 1.3. The primary action is an accent-filled pill with white
+  // ink -- the first place in the product where a colour token is the GROUND
+  // and a surface token is the ink, so the pair reads backwards compared with
+  // every row above it and is easy to forget.
+  ('surfaceRaised', 'accent', 4.5, 'Primary action label on the accent fill'),
+  //
+  // DELIBERATELY ABSENT, from Story 1.3's onboarding: the step bar's segments
+  // (`accent` filled, `borderHairline` unfilled) and the escalation timeline's
+  // four dots (`accent`, `accentBorder`, `stateLateGlyph`, `stateTakenGlyph`)
+  // with its `accentWash` connector -- all on `surfaceApp`.
+  //
+  // None of them carries a word. The step bar's meaning is its `Step 2 of 3`
+  // semantics label; every timeline row states its own time and outcome in
+  // `inkPrimary` and `inkMuted`, both listed above, and the screen reader gets
+  // the row as one sentence with the dot excluded. That is exactly the line
+  // DESIGN.md's contrast note draws: a genuinely lighter tone is allowed where
+  // "nothing is being read", and "must never carry a word".
+  //
+  // `accentBorder` on `surfaceApp` measures 1.60:1, so listing it would be
+  // asserting a bar the dot was never carrying. The measurement is pinned in
+  // the contrast group below, and the dot mapping itself is pinned against the
+  // rendered widgets in onboarding_screen_test.dart.
+  //
+  // The rule for a future story: if a mark is the ONLY way to tell two states
+  // apart, it belongs in this list.
 ];
 
 const Map<String, TextStyle> _actualTypography = {
@@ -408,10 +432,7 @@ void main() {
         reason: 'a new file under the exempted directory must be picked up',
       );
       expect(_namesIn(path), containsAll(['ThemeData', 'Brightness']));
-      expect(
-        _directiveUris(path),
-        contains('package:flutter/material.dart'),
-      );
+      expect(_directiveUris(path), contains('package:flutter/material.dart'));
 
       probe.deleteSync();
       expect(_designFiles(), isNot(contains(path)));
@@ -439,18 +460,20 @@ void main() {
 
       final frontmatter = _frontmatterLines(file);
 
-      final colors = _flatBlock(frontmatter, 'colors').map(
-        (key, value) => MapEntry(_lowerCamel(key), _parseHexColor(value)),
-      );
+      final colors = _flatBlock(
+        frontmatter,
+        'colors',
+      ).map((key, value) => MapEntry(_lowerCamel(key), _parseHexColor(value)));
       expect(
         colors,
         equals(_expectedColors),
         reason: 'DESIGN.md colors: and _expectedColors disagree',
       );
 
-      final radii = _flatBlock(frontmatter, 'rounded').map(
-        (key, value) => MapEntry(_lowerCamel(key), _parsePixels(value)),
-      );
+      final radii = _flatBlock(
+        frontmatter,
+        'rounded',
+      ).map((key, value) => MapEntry(_lowerCamel(key), _parsePixels(value)));
       expect(
         radii,
         equals(_expectedRadii),
@@ -459,18 +482,20 @@ void main() {
 
       // The frontmatter names the spacing steps 1-7; a Dart identifier cannot
       // be a bare digit, so the token layer prefixes each with `s`.
-      final spacing = _flatBlock(frontmatter, 'spacing').map(
-        (key, value) => MapEntry('s$key', _parsePixels(value)),
-      );
+      final spacing = _flatBlock(
+        frontmatter,
+        'spacing',
+      ).map((key, value) => MapEntry('s$key', _parsePixels(value)));
       expect(
         spacing,
         equals(_expectedSpacing),
         reason: 'DESIGN.md spacing: and _expectedSpacing disagree',
       );
 
-      final typography = _nestedBlock(frontmatter, 'typography').map(
-        (key, value) => MapEntry(_lowerCamel(key), _parseTextStyle(value)),
-      );
+      final typography = _nestedBlock(
+        frontmatter,
+        'typography',
+      ).map((key, value) => MapEntry(_lowerCamel(key), _parseTextStyle(value)));
       expect(
         typography,
         equals(_expectedTypography),
@@ -499,8 +524,10 @@ void main() {
       expect(_parsePixels('12.5px'), 12.5);
       // A declared range takes its lower bound, as the token layer does.
       expect(_parsePixels('13-13.5px'), 13);
-      expect(_lowerCamel('state-danger-surface-pressed'),
-          'stateDangerSurfacePressed');
+      expect(
+        _lowerCamel('state-danger-surface-pressed'),
+        'stateDangerSurfacePressed',
+      );
       expect(_lowerCamel('heading-xl'), 'headingXl');
     });
   });
@@ -704,7 +731,10 @@ void main() {
         '$_designDirectory/colors.dart',
       );
       expect(
-        _resolveRelative('$_designDirectory/design.dart', '../../features/x.dart'),
+        _resolveRelative(
+          '$_designDirectory/design.dart',
+          '../../features/x.dart',
+        ),
         'lib/features/x.dart',
       );
     });
@@ -889,7 +919,10 @@ void main() {
     test('all 7 spacing steps exist with the declared value', () {
       // As above: a count is a deliberate pause, not brittleness.
       expect(_expectedSpacing, hasLength(7));
-      expect(_actualSpacing.keys.toSet(), equals(_expectedSpacing.keys.toSet()));
+      expect(
+        _actualSpacing.keys.toSet(),
+        equals(_expectedSpacing.keys.toSet()),
+      );
 
       for (final entry in _expectedSpacing.entries) {
         expect(
@@ -956,6 +989,31 @@ void main() {
             'Contrast failures (${failures.length}):\n${failures.join('\n')}\n'
             'Darken the ink, never lighten the tile: the tiles carry the '
             "design's soft register and the ink carries the meaning.",
+      );
+    });
+
+    test('accentBorder cannot clear a glyph bar on the page', () {
+      // Story 1.3 uses accentBorder as the "8:15 gentle follow-up" dot in the
+      // onboarding timeline, on surfaceApp, and does NOT list that pairing in
+      // _contrastPairs -- see the note there. This is the measurement that
+      // justified the exclusion, and it is the only assertable part of it: the
+      // dot carries no word, so there is no bar for it to clear.
+      //
+      // An earlier version of this test also asserted a hand-written prose list
+      // of "deliberately unchecked" pairings was non-empty, and looped over
+      // _contrastPairs comparing it against that same list. Both halves were
+      // tautologies over data in this file. The dot mapping itself is pinned
+      // where it can actually fail -- in onboarding_screen_test.dart, against
+      // the rendered widgets.
+      //
+      // If a later palette change darkens accentBorder past 3:1, this fails,
+      // and the follow-up is to promote the dot into _contrastPairs.
+      expect(
+        _contrastRatio(MTColors.accentBorder, MTColors.surfaceApp),
+        lessThan(3.0),
+        reason:
+            'accentBorder is treated as decoration because it cannot clear a '
+            '3:1 glyph bar on the page. If it now can, it should be checked.',
       );
     });
 
@@ -1260,9 +1318,8 @@ String _lowerCamel(String key) {
       parts
           .skip(1)
           .map(
-            (part) => part.isEmpty
-                ? part
-                : part[0].toUpperCase() + part.substring(1),
+            (part) =>
+                part.isEmpty ? part : part[0].toUpperCase() + part.substring(1),
           )
           .join();
 }
@@ -1366,8 +1423,6 @@ double _hueDegrees(Color color) {
     hue = 60 * (((r - g) / delta) + 4);
   }
   return hue < 0 ? hue + 360 : hue;
-
-
 }
 
 /// WCAG relative luminance: sRGB channels linearised, then weighted for how
