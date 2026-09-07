@@ -194,10 +194,37 @@ const _metricClasses = {
   'Radius',
   'EdgeInsets',
   'EdgeInsetsDirectional',
+  // `Size(51, 31)` is the toggle track, and its two numbers are positional.
+  'Size',
 };
 
-/// Named arguments whose numeric literal is a type-scale decision.
-const _metricNamedArguments = {'fontSize'};
+/// Named arguments whose numeric literal is a design decision, mapped to the
+/// scale that decision belongs to.
+///
+/// `fontSize` was the whole set until 2026-09-07, when DESIGN.md gained
+/// `elevation:` and `dimensions:` blocks. It gained them because Story 1.5 hit
+/// a 46px stepper button that no token declared — and nothing here would have
+/// caught the number being typed at the use site, because `width:` and
+/// `height:` were not on this list. The gap was invisible only because Story
+/// 1.3 took every size from a token by discipline: there is not one literal
+/// `width:` or `height:` under `lib/` outside the token layer, so adding them
+/// now costs nothing and closes the hole for every screen after it.
+///
+/// `width:` and `height:` are genuinely ambiguous and the message says so
+/// rather than guessing. A `SizedBox` between two cards is spacing; a `SizedBox`
+/// sizing a glyph tile is a dimension; a `height:` on a `TextStyle` is a line
+/// height. An unresolved AST cannot tell them apart, and a rule that picked one
+/// scale would send half its readers to the wrong file.
+const _metricNamedArguments = {
+  'fontSize': 'MTTypography',
+  'width': 'MTSpacing (a gap) or MTDimensions (a component size)',
+  'height':
+      'MTSpacing (a gap), MTDimensions (a component size), or MTTypography '
+      '(a TextStyle line height)',
+  'blurRadius': 'MTElevation',
+  'spreadRadius': 'MTElevation',
+  'elevation': 'MTElevation',
+};
 
 /// The one numeric literal that carries no design decision.
 ///
@@ -904,14 +931,65 @@ void main() {
         'Text(x, maxLines: 2)',
         'ListView.builder(itemCount: 7)',
         'Expanded(flex: 3)',
+        // A duration is deliberately NOT guarded even though DESIGN.md now
+        // declares a `motion:` block. Most `Duration`s in this codebase are
+        // timeouts — `startupReadTimeout` is two seconds — and a rule that
+        // reddened every timeout to point at MTMotion would be false more often
+        // than true.
         'Duration(milliseconds: 2600)',
         'list.take(4)',
-        'const SizedBox(height: 16)',
       ]) {
         expect(
           check('final x = $expression;'),
           isEmpty,
           reason: '$expression is not a DESIGN.md scale',
+        );
+      }
+    });
+
+    test('a component size is a scale decision too', () {
+      // `const SizedBox(height: 16)` sat in the list above, asserted NOT to be
+      // a violation, with the reason "is not a DESIGN.md scale". That was true
+      // while DESIGN.md declared only colours, type, radii and spacing. It
+      // stopped being true on 2026-09-07, when `dimensions:` and `elevation:`
+      // were added — and the assertion would have gone on defending the hole,
+      // which is how a guard ends up certifying the thing it was written to
+      // prevent. It is reversed here rather than deleted, so the reversal is
+      // visible.
+      for (final expression in [
+        'const SizedBox(height: 16)',
+        'const SizedBox(width: 52)',
+        'Container(width: 88, height: 88)',
+        'BoxShadow(blurRadius: 10)',
+        'BoxShadow(spreadRadius: 2)',
+        'Material(elevation: 4)',
+        'const Size(51, 31)',
+      ]) {
+        expect(
+          check('final x = $expression;'),
+          isNotEmpty,
+          reason: '$expression invents a size DESIGN.md declares',
+        );
+      }
+
+      // Two literals, two violations — as with a four-sided inset.
+      expect(
+        check('final x = Container(width: 88, height: 88);'),
+        hasLength(2),
+      );
+
+      // And the tokens themselves still pass.
+      for (final expression in [
+        'const SizedBox(height: MTSpacing.s4)',
+        'const SizedBox(width: MTDimensions.tileMd)',
+        'BoxShadow(blurRadius: MTElevation.raised.blurRadius)',
+        'Size(MTDimensions.toggleTrackWidth, MTDimensions.toggleTrackHeight)',
+        'const SizedBox.shrink()',
+      ]) {
+        expect(
+          check('final x = $expression;'),
+          isEmpty,
+          reason: '$expression reads the scale rather than inventing one',
         );
       }
     });
@@ -1675,9 +1753,9 @@ class _LiteralColourVisitor extends RecursiveAstVisitor<void> {
 ///
 /// Deliberately narrow. It does not try to ban every number — a `maxLines: 2`,
 /// an `itemCount`, a `flex: 3` are not design decisions. It flags a bare number
-/// in exactly the three places DESIGN.md has a scale for it: a `fontSize:`, a
-/// [_metricClasses] radius, and a [_metricClasses] inset. Zero is exempt, for
-/// the same reason `Colors.transparent` is.
+/// only where DESIGN.md has a scale for it: a [_metricNamedArguments] argument,
+/// and a [_metricClasses] radius, inset or size. Zero is exempt, for the same
+/// reason `Colors.transparent` is.
 class _LiteralMetricVisitor extends RecursiveAstVisitor<void> {
   _LiteralMetricVisitor({
     required this.relativePath,
@@ -1721,18 +1799,24 @@ class _LiteralMetricVisitor extends RecursiveAstVisitor<void> {
     super.visitInstanceCreationExpression(node);
   }
 
-  /// `TextStyle(fontSize: 17)`, wherever it is written.
+  /// `TextStyle(fontSize: 17)`, `SizedBox(height: 8)`,
+  /// `BoxShadow(blurRadius: 10)` — wherever they are written.
   @override
   void visitNamedArgument(NamedArgument node) {
     final name = node.name.lexeme;
-    if (_metricNamedArguments.contains(name)) {
-      _reportIfNumeric(node.argumentExpression, '$name:', 'MTTypography');
+    final scale = _metricNamedArguments[name];
+    if (scale != null) {
+      _reportIfNumeric(node.argumentExpression, '$name:', scale);
     }
     super.visitNamedArgument(node);
   }
 
   void _reportLiteralArguments(ArgumentList arguments, String owner) {
-    final scale = owner.startsWith('EdgeInsets') ? 'MTSpacing' : 'MTRadius';
+    final scale = switch (owner) {
+      'Size' => 'MTDimensions',
+      final name when name.startsWith('EdgeInsets') => 'MTSpacing',
+      _ => 'MTRadius',
+    };
     for (final argument in arguments.arguments) {
       if (argument is NamedArgument) {
         _reportIfNumeric(argument.argumentExpression, owner, scale);
@@ -1765,9 +1849,10 @@ class _LiteralMetricVisitor extends RecursiveAstVisitor<void> {
     violations.add(
       '$relativePath:${location.lineNumber}:${location.columnNumber} '
       'passes the literal $value to $where '
-      '— TOKENS: DESIGN.md declares the type, radius and spacing scales as '
-      'surely as it declares the colours; take this from $scale under '
-      '$_designTokenDirectory rather than choosing a number by feel',
+      '— TOKENS: DESIGN.md declares the type, radius, spacing, elevation and '
+      'dimension scales as surely as it declares the colours; take this from '
+      '$scale under $_designTokenDirectory rather than choosing a number by '
+      'feel',
     );
   }
 }

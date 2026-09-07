@@ -43,10 +43,11 @@ import 'package:analyzer/dart/analysis/features.dart';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:flutter/animation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-// One import reaches all four namespaces: if the barrel stops exporting any of
-// them this file stops compiling, which is the reachability check.
+// One import reaches all eight namespaces: if the barrel stops exporting any
+// of them this file stops compiling, which is the reachability check.
 import 'package:med_remind_app/shared/design/design.dart';
 
 /// The directory `architecture_test.dart` exempts from the colour and metric
@@ -56,6 +57,10 @@ const _designDirectory = 'lib/shared/design';
 const _colorsPath = '$_designDirectory/colors.dart';
 const _typographyPath = '$_designDirectory/typography.dart';
 const _spacingPath = '$_designDirectory/spacing.dart';
+const _elevationPath = '$_designDirectory/elevation.dart';
+const _translucencyPath = '$_designDirectory/translucency.dart';
+const _motionPath = '$_designDirectory/motion.dart';
+const _dimensionsPath = '$_designDirectory/dimensions.dart';
 const _barrelPath = '$_designDirectory/design.dart';
 
 /// The files the guards below police: every Dart file under
@@ -161,13 +166,137 @@ const _dangerColorNames = {
 };
 
 /// `DESIGN.md`'s `rounded:` frontmatter.
+///
+/// Six steps until 2026-09-07, when the scale was measured against the
+/// delivered screens: two of the six were used nowhere, and `16px` — the
+/// most-used radius in the product — was not on the scale at all. Nine steps
+/// cover all 131 uses with no shift larger than 2px.
+///
+/// The frontmatter keys `2xl`, `3xl` and `4xl` cannot be Dart identifiers, so
+/// they are transposed to `xl2`, `xl3`, `xl4`. [_radiusKey] performs exactly
+/// that mapping when reading the frontmatter back.
 const Map<String, double> _expectedRadii = {
-  'xs': 6,
-  'sm': 9,
+  'xs': 8,
+  'sm': 12,
   'md': 14,
-  'lg': 18,
-  'xl': 20,
+  'lg': 16,
+  'xl': 18,
+  'xl2': 20,
+  'xl3': 26,
+  'xl4': 30,
   'pill': 999,
+};
+
+/// `DESIGN.md`'s `elevation:` frontmatter.
+///
+/// Two families and two singletons. The tint is load-bearing: an ink-tinted
+/// shadow belongs under a white card, an accent-tinted one under an accent
+/// surface, and swapping them looks like a bug rather than like a variation.
+const Map<String, BoxShadow> _expectedElevation = {
+  'raised': BoxShadow(
+    color: Color.fromRGBO(30, 26, 80, 0.05),
+    offset: Offset(0, 2),
+    blurRadius: 10,
+  ),
+  'raisedStrong': BoxShadow(
+    color: Color.fromRGBO(30, 26, 80, 0.09),
+    offset: Offset(0, 6),
+    blurRadius: 20,
+  ),
+  'accent': BoxShadow(
+    color: Color.fromRGBO(108, 92, 231, 0.28),
+    offset: Offset(0, 6),
+    blurRadius: 16,
+  ),
+  'accentStrong': BoxShadow(
+    color: Color.fromRGBO(108, 92, 231, 0.30),
+    offset: Offset(0, 10),
+    blurRadius: 22,
+  ),
+  'overlay': BoxShadow(
+    color: Color.fromRGBO(0, 0, 0, 0.25),
+    offset: Offset(0, 10),
+    blurRadius: 26,
+  ),
+  'knob': BoxShadow(
+    color: Color.fromRGBO(0, 0, 0, 0.2),
+    offset: Offset(0, 1),
+    blurRadius: 3,
+  ),
+};
+
+/// `DESIGN.md`'s `translucency:` frontmatter.
+const Map<String, Color> _expectedTranslucency = {
+  'scrim': Color.fromRGBO(14, 12, 32, 0.4),
+  'glass': Color.fromRGBO(255, 255, 255, 0.14),
+  'glassQuiet': Color.fromRGBO(255, 255, 255, 0.09),
+  'chipOnAccent': Color.fromRGBO(255, 255, 255, 0.16),
+  'hairlineOnInk': Color.fromRGBO(22, 22, 29, 0.06),
+};
+
+/// `DESIGN.md`'s `motion:` durations.
+const Map<String, Duration> _expectedMotionDurations = {
+  'quick': Duration(milliseconds: 180),
+  'standard': Duration(milliseconds: 200),
+  'entrance': Duration(milliseconds: 260),
+};
+
+/// `DESIGN.md`'s `motion:` easings.
+const Map<String, Curve> _expectedMotionEasings = {
+  'easingStandard': Curves.easeOut,
+  'easingEntrance': Cubic(0.2, 0.8, 0.2, 1),
+};
+
+/// `DESIGN.md`'s `dimensions:` frontmatter, keyed by its own names.
+///
+/// Every value is a LIST because three of the sixteen declare two numbers: the
+/// two rings each declare an outer diameter and a knockout, and the toggle
+/// track declares a width and a height. Keying on the frontmatter name rather
+/// than on the Dart name keeps the sixteen declarations and the nineteen
+/// constants comparable without either side inventing a name.
+const Map<String, List<double>> _expectedDimensions = {
+  'touch-min-ios': [44],
+  'touch-min-android': [48],
+  'tile-sm': [38],
+  'tile-md': [52],
+  'tile-lg': [64],
+  'tile-xl': [76],
+  'tile-2xl': [88],
+  'control-sm': [38],
+  'control-md': [46],
+  'ring-progress': [62, 48],
+  'ring-record': [74, 58],
+  'toggle-track': [51, 31],
+  'toggle-knob': [27],
+  'step-bar': [4],
+  'timeline-dot': [11],
+  'timeline-connector': [2],
+};
+
+/// The nineteen constants the sixteen declarations above become.
+///
+/// Spelled out rather than derived, because the three splits are the one place
+/// the mapping is a judgement and not a transformation.
+const Set<String> _expectedDimensionMembers = {
+  'touchMinIos',
+  'touchMinAndroid',
+  'tileSm',
+  'tileMd',
+  'tileLg',
+  'tileXl',
+  'tile2xl',
+  'controlSm',
+  'controlMd',
+  'ringProgressOuter',
+  'ringProgressKnockout',
+  'ringRecordOuter',
+  'ringRecordKnockout',
+  'toggleTrackWidth',
+  'toggleTrackHeight',
+  'toggleKnob',
+  'stepBar',
+  'timelineDot',
+  'timelineConnector',
 };
 
 /// `DESIGN.md`'s `spacing:` frontmatter, whose keys `1`–`7` become `s1`–`s7`.
@@ -318,7 +447,66 @@ const Map<String, double> _actualRadii = {
   'md': MTRadius.md,
   'lg': MTRadius.lg,
   'xl': MTRadius.xl,
+  'xl2': MTRadius.xl2,
+  'xl3': MTRadius.xl3,
+  'xl4': MTRadius.xl4,
   'pill': MTRadius.pill,
+};
+
+const Map<String, BoxShadow> _actualElevation = {
+  'raised': MTElevation.raised,
+  'raisedStrong': MTElevation.raisedStrong,
+  'accent': MTElevation.accent,
+  'accentStrong': MTElevation.accentStrong,
+  'overlay': MTElevation.overlay,
+  'knob': MTElevation.knob,
+};
+
+const Map<String, Color> _actualTranslucency = {
+  'scrim': MTTranslucency.scrim,
+  'glass': MTTranslucency.glass,
+  'glassQuiet': MTTranslucency.glassQuiet,
+  'chipOnAccent': MTTranslucency.chipOnAccent,
+  'hairlineOnInk': MTTranslucency.hairlineOnInk,
+};
+
+const Map<String, Duration> _actualMotionDurations = {
+  'quick': MTMotion.quick,
+  'standard': MTMotion.standard,
+  'entrance': MTMotion.entrance,
+};
+
+const Map<String, Curve> _actualMotionEasings = {
+  'easingStandard': MTMotion.easingStandard,
+  'easingEntrance': MTMotion.easingEntrance,
+};
+
+const Map<String, List<double>> _actualDimensions = {
+  'touch-min-ios': [MTDimensions.touchMinIos],
+  'touch-min-android': [MTDimensions.touchMinAndroid],
+  'tile-sm': [MTDimensions.tileSm],
+  'tile-md': [MTDimensions.tileMd],
+  'tile-lg': [MTDimensions.tileLg],
+  'tile-xl': [MTDimensions.tileXl],
+  'tile-2xl': [MTDimensions.tile2xl],
+  'control-sm': [MTDimensions.controlSm],
+  'control-md': [MTDimensions.controlMd],
+  'ring-progress': [
+    MTDimensions.ringProgressOuter,
+    MTDimensions.ringProgressKnockout,
+  ],
+  'ring-record': [
+    MTDimensions.ringRecordOuter,
+    MTDimensions.ringRecordKnockout,
+  ],
+  'toggle-track': [
+    MTDimensions.toggleTrackWidth,
+    MTDimensions.toggleTrackHeight,
+  ],
+  'toggle-knob': [MTDimensions.toggleKnob],
+  'step-bar': [MTDimensions.stepBar],
+  'timeline-dot': [MTDimensions.timelineDot],
+  'timeline-connector': [MTDimensions.timelineConnector],
 };
 
 const Map<String, double> _actualSpacing = {
@@ -394,8 +582,17 @@ void main() {
 
       expect(
         files,
-        containsAll([_colorsPath, _typographyPath, _spacingPath, _barrelPath]),
-        reason: 'the four known token files must be among those policed',
+        containsAll([
+          _colorsPath,
+          _typographyPath,
+          _spacingPath,
+          _elevationPath,
+          _translucencyPath,
+          _motionPath,
+          _dimensionsPath,
+          _barrelPath,
+        ]),
+        reason: 'the eight known token files must be among those policed',
       );
       for (final path in files) {
         expect(path, startsWith('$_designDirectory/'));
@@ -450,10 +647,11 @@ void main() {
         markTestSkipped(
           'DESIGN.md was not found at $_designMarkdownPath, so the expected '
           'maps in this file were NOT verified against the source of truth. '
-          'Unverified: 30 colours, 6 radii, 7 spacing steps and 12 type '
-          'styles — all still checked against lib/shared/design/, none checked '
-          'against DESIGN.md. Check out the planning repository beside this '
-          'one to close the gap.',
+          'Unverified: 31 colours, 12 type styles, 9 radii, 7 spacing steps, '
+          '6 shadows, 5 translucencies, 6 motion values and 16 dimensions — '
+          'all still checked against lib/shared/design/, none checked against '
+          'DESIGN.md. Check out the planning repository beside this one to '
+          'close the gap.',
         );
         return;
       }
@@ -473,11 +671,78 @@ void main() {
       final radii = _flatBlock(
         frontmatter,
         'rounded',
-      ).map((key, value) => MapEntry(_lowerCamel(key), _parsePixels(value)));
+      ).map((key, value) => MapEntry(_radiusKey(key), _parsePixels(value)));
       expect(
         radii,
         equals(_expectedRadii),
         reason: 'DESIGN.md rounded: and _expectedRadii disagree',
+      );
+
+      final elevation = _flatBlock(
+        frontmatter,
+        'elevation',
+      ).map((key, value) => MapEntry(_lowerCamel(key), _parseBoxShadow(value)));
+      expect(
+        elevation,
+        equals(_expectedElevation),
+        reason: 'DESIGN.md elevation: and _expectedElevation disagree',
+      );
+
+      final translucency = _flatBlock(
+        frontmatter,
+        'translucency',
+      ).map((key, value) => MapEntry(_lowerCamel(key), _parseRgba(value)));
+      expect(
+        translucency,
+        equals(_expectedTranslucency),
+        reason: 'DESIGN.md translucency: and _expectedTranslucency disagree',
+      );
+
+      // `motion:` mixes three kinds of entry, so it is read three times rather
+      // than coerced into one map. `reduce-motion` is prose — "every duration
+      // collapses to zero" — and so pins a value only by being read as English;
+      // the assertion below is that the token layer took it literally.
+      final motion = _flatBlock(frontmatter, 'motion');
+      expect(
+        {
+          for (final key in _expectedMotionDurations.keys)
+            key: _parseDuration(motion[_kebab(key)]!),
+        },
+        equals(_expectedMotionDurations),
+        reason:
+            'DESIGN.md motion: durations and _expectedMotionDurations '
+            'disagree',
+      );
+      for (final key in _expectedMotionEasings.keys) {
+        // Compared by sampling, not by `==`. `Cubic` inherits identity
+        // equality, so a curve parsed here is never equal to a const one no
+        // matter how identical the four control points are — and the same
+        // comparison silently PASSES between the two const maps above, because
+        // Dart canonicalises those. Sampling is what the design actually cares
+        // about: two curves that agree everywhere are the same easing.
+        _expectSameCurve(
+          _parseCurve(motion[_kebab(key)]!),
+          _expectedMotionEasings[key]!,
+          'DESIGN.md motion: $key and _expectedMotionEasings disagree',
+        );
+      }
+      expect(
+        motion['reduce-motion'],
+        contains('zero'),
+        reason:
+            'MTMotion.reduceMotion is Duration.zero because DESIGN.md says '
+            'every duration collapses to zero. If that sentence changed, the '
+            'constant is now a local invention rather than a transcription.',
+      );
+
+      final dimensions = _flatBlock(
+        frontmatter,
+        'dimensions',
+      ).map((key, value) => MapEntry(key, _parseMeasurements(value)));
+      expect(
+        dimensions,
+        equals(_expectedDimensions),
+        reason: 'DESIGN.md dimensions: and _expectedDimensions disagree',
       );
 
       // The frontmatter names the spacing steps 1-7; a Dart identifier cannot
@@ -514,7 +779,11 @@ void main() {
 
       final frontmatter = _frontmatterLines(file);
       expect(_flatBlock(frontmatter, 'colors'), hasLength(31));
-      expect(_flatBlock(frontmatter, 'rounded'), hasLength(6));
+      expect(_flatBlock(frontmatter, 'rounded'), hasLength(9));
+      expect(_flatBlock(frontmatter, 'elevation'), hasLength(6));
+      expect(_flatBlock(frontmatter, 'translucency'), hasLength(5));
+      expect(_flatBlock(frontmatter, 'motion'), hasLength(6));
+      expect(_flatBlock(frontmatter, 'dimensions'), hasLength(16));
       expect(_flatBlock(frontmatter, 'spacing'), hasLength(7));
       expect(_nestedBlock(frontmatter, 'typography'), hasLength(12));
 
@@ -528,6 +797,38 @@ void main() {
         _lowerCamel('state-danger-surface-pressed'),
         'stateDangerSurfacePressed',
       );
+      expect(_radiusKey('2xl'), 'xl2');
+      expect(_radiusKey('lg'), 'lg');
+      expect(_kebab('easingStandard'), 'easing-standard');
+      expect(
+        _parseRgba('rgba(14,12,32,.4)'),
+        const Color.fromRGBO(14, 12, 32, 0.4),
+      );
+      expect(
+        _parseBoxShadow('0 2px 10px rgba(30,26,80,.05)'),
+        const BoxShadow(
+          color: Color.fromRGBO(30, 26, 80, 0.05),
+          offset: Offset(0, 2),
+          blurRadius: 10,
+        ),
+      );
+      expect(_parseDuration('180ms'), const Duration(milliseconds: 180));
+      _expectSameCurve(_parseCurve('ease-out'), Curves.easeOut, 'ease-out');
+      _expectSameCurve(
+        _parseCurve('cubic-bezier(.2,.8,.2,1)'),
+        const Cubic(0.2, 0.8, 0.2, 1),
+        'cubic-bezier',
+      );
+      // And the sampler is not vacuously true: two genuinely different easings
+      // must not compare equal, or every easing check above is decoration.
+      expect(
+        () => _expectSameCurve(Curves.easeIn, Curves.easeOut, 'sampler'),
+        throwsA(isA<TestFailure>()),
+      );
+      // The three shapes a dimension takes.
+      expect(_parseMeasurements('44px'), [44]);
+      expect(_parseMeasurements('62px outer, 48px knockout'), [62, 48]);
+      expect(_parseMeasurements('51x31px'), [51, 31]);
       expect(_lowerCamel('heading-xl'), 'headingXl');
     });
   });
@@ -609,6 +910,11 @@ void main() {
             ..._actualTypography.keys,
             ..._actualRadii.keys,
             ..._actualSpacing.keys,
+            ..._actualElevation.keys,
+            ..._actualTranslucency.keys,
+            ..._actualMotionDurations.keys,
+            ..._actualMotionEasings.keys,
+            ..._expectedDimensionMembers,
           ].where((name) {
             final words = _camelWords(name);
             return words.contains('dark') || words.contains('light');
@@ -668,6 +974,14 @@ void main() {
         'ColorSwatch',
         'HSLColor',
         'HSVColor',
+        // `motion.dart` needs animation.dart for Curve, Curves and Cubic, which
+        // widens the import allowlist below past painting.dart. These are what
+        // that widening lets in and must not be used: a token is a value, and
+        // an animation the token layer OWNS is behaviour. A widget composes the
+        // controller; it reads the duration from here.
+        'AnimationController',
+        'Tween',
+        'TweenSequence',
       };
 
       for (final path in _designFiles()) {
@@ -696,10 +1010,17 @@ void main() {
           if (uri.startsWith('package:') || uri.startsWith('dart:')) {
             expect(
               uri,
-              equals('package:flutter/painting.dart'),
+              anyOf(
+                equals('package:flutter/painting.dart'),
+                equals('package:flutter/animation.dart'),
+              ),
               reason:
-                  '$path pulls in $uri. Painting carries Color and TextStyle; '
-                  'material would carry ThemeData and the Colors palette too.',
+                  '$path pulls in $uri. Painting carries Color, Offset, '
+                  'BoxShadow and TextStyle; animation carries Curve, Curves '
+                  'and Cubic, which DESIGN.md\'s motion: block names directly. '
+                  'Material would carry ThemeData and the Colors palette too. '
+                  'The banned-name check above closes what animation.dart '
+                  'otherwise opens.',
             );
             continue;
           }
@@ -895,12 +1216,12 @@ void main() {
   });
 
   group('radius and spacing scales', () {
-    test('all 6 radii exist with the declared value', () {
+    test('all 9 radii exist with the declared value', () {
       // A count is a deliberate pause, not brittleness: the expected map lives
       // in this file, so key-set equality alone passes when someone edits both
       // maps together. Only the literal count forces the change to be a
       // decision. Bump it when you mean to.
-      expect(_expectedRadii, hasLength(6));
+      expect(_expectedRadii, hasLength(9));
       expect(_actualRadii.keys.toSet(), equals(_expectedRadii.keys.toSet()));
 
       for (final entry in _expectedRadii.entries) {
@@ -957,6 +1278,337 @@ void main() {
       for (final entry in _actualRadii.entries) {
         expect(entry.value, greaterThan(0), reason: 'MTRadius.${entry.key}');
       }
+    });
+  });
+
+  group('elevation, translucency, motion and dimensions', () {
+    // These four families were absent from DESIGN.md until 2026-09-07. They
+    // were not absent from the design: the delivered screens carry 14
+    // box-shadows, several rgba films, 4 durations, 2 easings and 35 fixed
+    // sizes. Story 1.5 is what surfaced the gap — the add-medicine steppers are
+    // 46px, no token said 46, and the literal-metric rule correctly refused to
+    // let the number be typed at the use site.
+
+    test('all 6 shadows exist with the declared value', () {
+      // A count is a deliberate pause, as everywhere else in this file.
+      expect(_expectedElevation, hasLength(6));
+      expect(
+        _actualElevation.keys.toSet(),
+        equals(_expectedElevation.keys.toSet()),
+      );
+      for (final entry in _expectedElevation.entries) {
+        expect(
+          _actualElevation[entry.key],
+          equals(entry.value),
+          reason: 'MTElevation.${entry.key}',
+        );
+      }
+      expect(
+        _staticMemberNames(_elevationPath, 'MTElevation'),
+        equals(_expectedElevation.keys.toSet()),
+      );
+    });
+
+    test('the two shadow families keep their tints apart', () {
+      // The whole reason six tokens replace fourteen shadows: a card's shadow
+      // is ink-tinted and an accent surface's is accent-tinted. A token that
+      // drifted between the families would still compile, still render, and
+      // look like a bug — a violet glow under a white card, or a grey shadow
+      // under the primary button.
+      const inkTinted = ['raised', 'raisedStrong'];
+      const accentTinted = ['accent', 'accentStrong'];
+
+      for (final name in inkTinted) {
+        final shadow = _actualElevation[name]!;
+        expect(shadow.color.b, greaterThan(shadow.color.r), reason: name);
+        expect(shadow.color.r, greaterThan(shadow.color.g), reason: name);
+      }
+
+      for (final name in accentTinted) {
+        final shadow = _actualElevation[name]!;
+        // Not merely violet — the accent itself, at reduced alpha.
+        expect(
+          Color.from(
+            alpha: 1,
+            red: shadow.color.r,
+            green: shadow.color.g,
+            blue: shadow.color.b,
+          ),
+          equals(MTColors.accent),
+          reason:
+              '$name must be the accent at reduced alpha, so that retinting '
+              'the accent retints its glow',
+        );
+      }
+
+      // And the accent family is unmistakably stronger than the ink family:
+      // an accent surface glows, a card merely lifts.
+      expect(
+        _actualElevation['accent']!.color.a,
+        greaterThan(_actualElevation['raisedStrong']!.color.a * 2),
+      );
+    });
+
+    test(
+      'each shadow family is ordered: strong lifts further than resting',
+      () {
+        for (final pair in [
+          ('raised', 'raisedStrong'),
+          ('accent', 'accentStrong'),
+        ]) {
+          final resting = _actualElevation[pair.$1]!;
+          final strong = _actualElevation[pair.$2]!;
+          expect(strong.offset.dy, greaterThan(resting.offset.dy));
+          expect(strong.blurRadius, greaterThan(resting.blurRadius));
+        }
+      },
+    );
+
+    test('every shadow falls downward and none is a hard edge', () {
+      for (final entry in _actualElevation.entries) {
+        // A single light source, above. An upward or sideways shadow reads as a
+        // different room.
+        expect(entry.value.offset.dx, 0, reason: 'MTElevation.${entry.key}');
+        expect(
+          entry.value.offset.dy,
+          greaterThan(0),
+          reason: 'MTElevation.${entry.key}',
+        );
+        expect(
+          entry.value.blurRadius,
+          greaterThan(0),
+          reason: 'MTElevation.${entry.key} — a zero blur is a drawn border',
+        );
+        expect(entry.value.spreadRadius, 0);
+      }
+    });
+
+    test('all 5 translucencies exist with the declared value', () {
+      expect(_expectedTranslucency, hasLength(5));
+      expect(
+        _actualTranslucency.keys.toSet(),
+        equals(_expectedTranslucency.keys.toSet()),
+      );
+      for (final entry in _expectedTranslucency.entries) {
+        expect(
+          _actualTranslucency[entry.key],
+          equals(entry.value),
+          reason: 'MTTranslucency.${entry.key}',
+        );
+      }
+      expect(
+        _staticMemberNames(_translucencyPath, 'MTTranslucency'),
+        equals(_expectedTranslucency.keys.toSet()),
+      );
+    });
+
+    test('a translucency is a film, and MTColors holds none of them', () {
+      // The two scales must not merge. Every MTColors token is opaque and means
+      // the same thing wherever it is painted; every token here depends
+      // entirely on what is underneath it. Reaching for a film where a colour
+      // was wanted produces a widget that looks right on one screen and
+      // vanishes on the next.
+      for (final entry in _actualTranslucency.entries) {
+        expect(
+          entry.value.a,
+          lessThan(1),
+          reason:
+              'MTTranslucency.${entry.key} is opaque, so it belongs in '
+              'MTColors, not here',
+        );
+        expect(
+          entry.value.a,
+          greaterThan(0),
+          reason:
+              'MTTranslucency.${entry.key} is fully transparent, which paints '
+              'nothing',
+        );
+      }
+
+      for (final entry in _actualColors.entries) {
+        expect(
+          entry.value.a,
+          1,
+          reason:
+              'MTColors.${entry.key} is translucent. A film belongs in '
+              'MTTranslucency, whose names say what they must sit on.',
+        );
+      }
+    });
+
+    test('all 6 motion values exist with the declared value', () {
+      // Three durations, two easings, and the Reduce Motion policy — six
+      // frontmatter entries, six constants.
+      expect(_expectedMotionDurations, hasLength(3));
+      expect(_expectedMotionEasings, hasLength(2));
+
+      for (final entry in _expectedMotionDurations.entries) {
+        expect(
+          _actualMotionDurations[entry.key],
+          equals(entry.value),
+          reason: 'MTMotion.${entry.key}',
+        );
+      }
+      for (final entry in _expectedMotionEasings.entries) {
+        // Sampled, not `==`. These two maps hold const `Cubic`s that Dart
+        // canonicalises, so identity equality passes here for a reason that has
+        // nothing to do with the curves being right. See the SOURCE PARITY
+        // group for the same trap catching a runtime-parsed curve.
+        _expectSameCurve(
+          _actualMotionEasings[entry.key]!,
+          entry.value,
+          'MTMotion.${entry.key}',
+        );
+      }
+      expect(MTMotion.reduceMotion, Duration.zero);
+
+      expect(
+        _staticMemberNames(_motionPath, 'MTMotion'),
+        equals({
+          ..._expectedMotionDurations.keys,
+          ..._expectedMotionEasings.keys,
+          'reduceMotion',
+        }),
+      );
+    });
+
+    test('the durations are ordered and none of them is instant', () {
+      // `entrance` is the longest because an arriving surface has further to
+      // travel; a clipped entrance reads as a jump rather than as a movement.
+      expect(
+        MTMotion.quick,
+        lessThan(MTMotion.standard),
+        reason: 'a press must settle faster than anything else',
+      );
+      expect(MTMotion.standard, lessThan(MTMotion.entrance));
+
+      for (final entry in _actualMotionDurations.entries) {
+        expect(
+          entry.value,
+          greaterThan(Duration.zero),
+          reason:
+              'MTMotion.${entry.key} is zero. Reduce Motion is the one place a '
+              'duration collapses, and MTMotion.reduceMotion already names it.',
+        );
+        expect(
+          entry.value,
+          lessThan(const Duration(milliseconds: 400)),
+          reason:
+              'MTMotion.${entry.key} is long enough to be felt as a wait. This '
+              'is a medication reminder, not a showreel.',
+        );
+      }
+    });
+
+    test('both easings decelerate', () {
+      // Ease-in on a UI transition makes a control feel unresponsive: nothing
+      // appears to happen for the first frames after the finger lands.
+      for (final entry in _actualMotionEasings.entries) {
+        final quarter = entry.value.transform(0.25);
+        expect(
+          quarter,
+          greaterThan(0.25),
+          reason:
+              'MTMotion.${entry.key} has covered only ${quarter.toStringAsFixed(2)} '
+              'of its distance at the quarter mark, so it accelerates into the '
+              'change rather than out of it',
+        );
+        expect(entry.value.transform(0), 0);
+        expect(entry.value.transform(1), 1);
+      }
+    });
+
+    test('all 16 dimensions exist with the declared value', () {
+      expect(_expectedDimensions, hasLength(16));
+      expect(
+        _actualDimensions.keys.toSet(),
+        equals(_expectedDimensions.keys.toSet()),
+      );
+      for (final entry in _expectedDimensions.entries) {
+        expect(
+          _actualDimensions[entry.key],
+          equals(entry.value),
+          reason: 'dimensions/${entry.key}',
+        );
+      }
+      expect(
+        _staticMemberNames(_dimensionsPath, 'MTDimensions'),
+        equals(_expectedDimensionMembers),
+      );
+      // The three splits, spelled out: sixteen declarations, nineteen
+      // constants. If that arithmetic changes, one of the two maps was edited
+      // without the other.
+      expect(_expectedDimensionMembers, hasLength(19));
+      expect(
+        _actualDimensions.values.fold<int>(0, (sum, v) => sum + v.length),
+        _expectedDimensionMembers.length,
+      );
+    });
+
+    test('the dimensions are NOT a scale, and are not tested as one', () {
+      // MTSpacing and MTRadius are scales: any step is a defensible choice, so
+      // they are checked for distinctness and ascending order. Nothing here is
+      // interchangeable — tile-sm and control-sm are both 38 because a compact
+      // tile and a compact control happen to be the same size, and collapsing
+      // them to one token would tie a stepper arrow to a glyph tile forever.
+      //
+      // So the only invariants available are the ones the roles actually imply.
+      expect(MTDimensions.tileSm, MTDimensions.controlSm);
+
+      // The tile family is a progression, because a tile's size IS its
+      // prominence.
+      final tiles = [
+        MTDimensions.tileSm,
+        MTDimensions.tileMd,
+        MTDimensions.tileLg,
+        MTDimensions.tileXl,
+        MTDimensions.tile2xl,
+      ];
+      for (var i = 1; i < tiles.length; i++) {
+        expect(tiles[i], greaterThan(tiles[i - 1]));
+      }
+      expect(MTDimensions.controlMd, greaterThan(MTDimensions.controlSm));
+
+      // A ring's knockout is inside its outer diameter, or it is not a ring.
+      for (final ring in [
+        (MTDimensions.ringProgressOuter, MTDimensions.ringProgressKnockout),
+        (MTDimensions.ringRecordOuter, MTDimensions.ringRecordKnockout),
+      ]) {
+        expect(ring.$2, lessThan(ring.$1));
+        expect(ring.$2, greaterThan(0));
+      }
+
+      // The knob fits inside the track with room for its shadow.
+      expect(MTDimensions.toggleKnob, lessThan(MTDimensions.toggleTrackHeight));
+      expect(
+        MTDimensions.toggleTrackWidth,
+        greaterThan(MTDimensions.toggleTrackHeight),
+        reason: 'a toggle track is a horizontal capsule',
+      );
+
+      // Every dimension is a positive number of logical pixels.
+      for (final entry in _actualDimensions.entries) {
+        for (final value in entry.value) {
+          expect(value, greaterThan(0), reason: 'dimensions/${entry.key}');
+        }
+      }
+    });
+
+    test('the touch floors are floors, and Android is the binding one', () {
+      // NFR-5's practical edge. A control sized to the iOS minimum and shipped
+      // on both platforms is undersized on Android, so a shared control takes
+      // the larger number. This is the assertion that stops someone "tidying"
+      // the two floors into one 44.
+      expect(
+        MTDimensions.touchMinAndroid,
+        greaterThan(MTDimensions.touchMinIos),
+      );
+
+      // And the floors really are floors: at least one declared control sits
+      // below them, which is why they must be named rather than assumed. A
+      // control drawn at controlMd still needs its tap target padded out.
+      expect(MTDimensions.controlMd, lessThan(MTDimensions.touchMinAndroid));
+      expect(MTDimensions.controlSm, lessThan(MTDimensions.touchMinIos));
     });
   });
 
@@ -1257,6 +1909,142 @@ String _unquote(String value) {
     return trimmed.substring(1, trimmed.length - 1);
   }
   return trimmed;
+}
+
+/// Fails unless two curves agree across their whole domain.
+///
+/// [Curve] and [Cubic] inherit identity equality, so `expect(a, equals(b))`
+/// between curves tests object identity: it passes for two const `Cubic`s Dart
+/// canonicalised, and fails for two mathematically identical curves when either
+/// was built at runtime. Neither answer says anything about the easing.
+/// Twenty-one samples at 0.05 intervals do.
+void _expectSameCurve(Curve actual, Curve expected, String reason) {
+  for (var i = 0; i <= 20; i++) {
+    final t = i / 20;
+    expect(
+      actual.transform(t),
+      closeTo(expected.transform(t), 1e-6),
+      reason: '$reason — they diverge at t=$t',
+    );
+  }
+}
+
+/// A `rounded:` key as its Dart identifier.
+///
+/// `2xl`, `3xl` and `4xl` cannot begin a Dart identifier, so the digit moves to
+/// the end: `xl2`, `xl3`, `xl4`. Every other key passes through unchanged.
+/// This is the same mechanical transposition `spacing:`'s `1`-`7` undergo to
+/// become `s1`-`s7`; it is a function rather than a map so that a new `5xl`
+/// needs no second edit here.
+String _radiusKey(String key) {
+  final match = RegExp(r'^([0-9]+)([a-z]+)$').firstMatch(key);
+  if (match == null) return _lowerCamel(key);
+  return '${match.group(2)}${match.group(1)}';
+}
+
+/// A lowerCamel Dart identifier as the kebab-case frontmatter key it came from.
+///
+/// The inverse of [_lowerCamel], for the blocks read by Dart name rather than
+/// by frontmatter name.
+String _kebab(String name) => name
+    .replaceAllMapped(
+      RegExp('[A-Z]'),
+      (match) => '-${match.group(0)!.toLowerCase()}',
+    )
+    .replaceAll(RegExp('^-'), '');
+
+/// `rgba(30,26,80,.05)` as a [Color].
+///
+/// The alpha is written CSS-style, so `.05` has no leading zero and
+/// `double.parse` would reject it.
+Color _parseRgba(String value) {
+  final match = RegExp(
+    r'^rgba\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,'
+    r'\s*([0-9]*\.?[0-9]+)\s*\)$',
+  ).firstMatch(value);
+  expect(match, isNotNull, reason: 'not an rgba() colour: $value');
+  return Color.fromRGBO(
+    int.parse(match!.group(1)!),
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+    _parseCssNumber(match.group(4)!),
+  );
+}
+
+/// `0 2px 10px rgba(30,26,80,.05)` as a [BoxShadow].
+///
+/// CSS and Flutter both call the third number a blur radius but derive the
+/// Gaussian sigma from it slightly differently, so the transcription is close
+/// rather than pixel-identical. The number is transcribed anyway: the contract
+/// owns it, and a use site that re-tunes it by eye has forked the contract
+/// where nothing can see the fork.
+BoxShadow _parseBoxShadow(String value) {
+  final match = RegExp(
+    r'^(-?[0-9]*\.?[0-9]+)(?:px)?\s+(-?[0-9]*\.?[0-9]+)px\s+'
+    r'([0-9]*\.?[0-9]+)px\s+(rgba\(.+\))$',
+  ).firstMatch(value);
+  expect(match, isNotNull, reason: 'not a `x y blur rgba()` shadow: $value');
+  return BoxShadow(
+    color: _parseRgba(match!.group(4)!),
+    offset: Offset(
+      _parseCssNumber(match.group(1)!),
+      _parseCssNumber(match.group(2)!),
+    ),
+    blurRadius: _parseCssNumber(match.group(3)!),
+  );
+}
+
+/// `180ms` as a [Duration].
+Duration _parseDuration(String value) {
+  final match = RegExp(r'^([0-9]+)ms$').firstMatch(value);
+  expect(match, isNotNull, reason: 'not a millisecond duration: $value');
+  return Duration(milliseconds: int.parse(match!.group(1)!));
+}
+
+/// `ease-out` or `cubic-bezier(.2,.8,.2,1)` as a [Curve].
+///
+/// Only the two forms DESIGN.md actually uses. A third easing keyword should
+/// fail here loudly rather than fall back to a default, because a silently
+/// substituted curve is exactly the kind of drift this file exists to catch.
+Curve _parseCurve(String value) {
+  if (value == 'ease-out') return Curves.easeOut;
+
+  final match = RegExp(
+    r'^cubic-bezier\(\s*([0-9]*\.?[0-9]+)\s*,\s*([0-9]*\.?[0-9]+)\s*,'
+    r'\s*([0-9]*\.?[0-9]+)\s*,\s*([0-9]*\.?[0-9]+)\s*\)$',
+  ).firstMatch(value);
+  expect(
+    match,
+    isNotNull,
+    reason: 'not `ease-out` or a cubic-bezier(): $value',
+  );
+  return Cubic(
+    _parseCssNumber(match!.group(1)!),
+    _parseCssNumber(match.group(2)!),
+    _parseCssNumber(match.group(3)!),
+    _parseCssNumber(match.group(4)!),
+  );
+}
+
+/// Every number in a `dimensions:` value, in the order written.
+///
+/// Covers all three shapes the block uses — `44px`, `51x31px`, and
+/// `62px outer, 48px knockout` — without a case per shape, because what the
+/// numbers MEAN is carried by the constant names in `dimensions.dart` and the
+/// key in `_expectedDimensions`, not by the surrounding words.
+List<double> _parseMeasurements(String value) {
+  final numbers = RegExp(
+    r'[0-9]+(?:\.[0-9]+)?',
+  ).allMatches(value).map((match) => double.parse(match.group(0)!)).toList();
+  expect(numbers, isNotEmpty, reason: 'no measurement in: $value');
+  return numbers;
+}
+
+/// A CSS number, which may omit the leading zero — `.05`, `-.5`.
+double _parseCssNumber(String value) {
+  if (value.startsWith('.')) return double.parse('0$value');
+  if (value.startsWith('-.')) return double.parse('-0${value.substring(1)}');
+  return double.parse(value);
 }
 
 /// `#RRGGBB` as an opaque [Color], which is the mechanical mapping the token

@@ -1,0 +1,4 @@
+#!/bin/sh
+# See tool/README.md. The broken Xcode's ar cannot locate xcodebuild; the
+# Command Line Tools copy works. Forward to it.
+exec /Library/Developer/CommandLineTools/usr/bin/ar "$@"

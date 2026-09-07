@@ -9,32 +9,59 @@
 // `EdgeInsets`. This story ships values, not UI; the widgets that wrap them
 // belong to Story 1.3 onward.
 
-/// The six corner radii declared by `DESIGN.md`.
+/// The nine corner radii declared by `DESIGN.md`.
 ///
 /// Nothing in the product is square-cornered. The impression should be
 /// soft-edged without being bubbly.
 ///
+/// This was six steps until 2026-09-07. Measured against the delivered screens
+/// the six covered the design badly: two of them were used nowhere at all, and
+/// `16px` — the most-used radius in the whole product, carrying the primary
+/// button, the text inputs and the add-medicine tiles — was not on the scale.
+/// Nine steps cover all 131 uses; twenty of those shift, every one by at most
+/// 2px, and the four most-used values are exact.
+///
+/// The frontmatter names three of the steps `2xl`, `3xl` and `4xl`. A Dart
+/// identifier cannot begin with a digit, so each is transposed to [xl2], [xl3]
+/// and [xl4]. The mapping is mechanical, as `spacing:`'s `1`-`7` to [MTSpacing]'s
+/// `s1`-`s7` is.
+///
 /// Not instantiable and not extensible: a namespace for values, not a type.
 abstract final class MTRadius {
   /// `rounded/xs` — glyph marks and the smallest inset elements.
-  static const double xs = 6;
+  static const double xs = 8;
 
-  /// `rounded/sm` — small inset elements.
-  static const double sm = 9;
+  /// `rounded/sm` — small inset elements and inline badges.
+  static const double sm = 12;
 
-  /// `rounded/md` — glyph tiles, inputs, and the next-dose chip.
+  /// `rounded/md` — glyph tiles and the next-dose chip.
   static const double md = 14;
 
-  /// `rounded/lg` — dose and medicine cards.
-  static const double lg = 18;
+  /// `rounded/lg` — the primary button, text inputs, and the add-medicine
+  /// tiles.
+  ///
+  /// The most-used radius in the product. If a new surface has no obvious step,
+  /// this is the one it probably wants.
+  static const double lg = 16;
 
-  /// `rounded/xl` — the action sheet's top corners and the progress card.
-  static const double xl = 20;
+  /// `rounded/xl` — dose and medicine cards.
+  static const double xl = 18;
 
-  /// `rounded/pill` — chips, day pills, toggles, buttons and the progress ring.
+  /// `rounded/2xl` — the progress card and other full-width panels.
+  static const double xl2 = 20;
+
+  /// `rounded/3xl` — the action sheet's top corners.
+  static const double xl3 = 26;
+
+  /// `rounded/4xl` — the largest rounded surface: a full-bleed accent panel.
+  static const double xl4 = 30;
+
+  /// `rounded/pill` — chips, day pills, toggles and the progress ring.
   ///
   /// A sentinel large enough to round any height into a capsule, not a measured
-  /// radius.
+  /// radius. `DESIGN.md` writes `999px`; the delivered screens write `99px`
+  /// thirty-four times. Both round fully at every height the product uses, so
+  /// the contract's value is the one transcribed here.
   static const double pill = 999;
 }
 
