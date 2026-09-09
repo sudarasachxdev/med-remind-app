@@ -33,8 +33,39 @@ const Map<String, String> _forbiddenImports = <String, String>{
   'permission_handler':
       'AD-17: permission_handler is not a dependency of this project at all. '
       'flutter_local_notifications is the single authority.',
-  'flutter_timezone':
-      'AD-6/AD-9: only the Reconciler reads the device zone, in Epic 3.',
+  // `flutter_timezone` was here until 2026-09-08, forbidden as
+  // "AD-6/AD-9: only the Reconciler reads the device zone, in Epic 3."
+  //
+  // AD-9 was amended, and this entry is retired rather than merely deleted so
+  // the reason survives. The old rule contradicted AD-6: AD-6 requires every
+  // Schedule to persist a real IANA zone, and Story 1.5 is the first story
+  // that creates a Schedule. That left two illegal-or-wrong options and no
+  // right one -- store `Etc/UTC`, which for a user in `Asia/Colombo` names a
+  // different instant and would be consumed by Stories 1.6/1.7 as if it were
+  // true, or leave the Medicine unscheduled, which FR-1 forbids.
+  //
+  // AD-9 now distinguishes READING the zone (permitted at Schedule creation,
+  // through the `Clock` port) from REACTING to a zone change (still the
+  // Reconciler's alone). Deleting the entry outright would have widened the
+  // package to the whole tree, which is more than the amendment granted, so it
+  // moves to [_directoryScopedImports] instead of disappearing.
+};
+
+/// Packages exactly one directory under `lib/` may import.
+///
+/// The middle ground `_forbiddenImports` cannot express. That map is
+/// all-or-nothing: a package is banned everywhere or allowed everywhere, and
+/// every entry so far has been retired by simply deleting it. `flutter_timezone`
+/// is the first package whose permission is real but narrow -- AD-9 as amended
+/// lets the device zone be READ, and AD-5 confines every clock read to one
+/// adapter, so the two together allow it in exactly one place.
+///
+/// Deleting an entry here does not widen a package to the tree; it removes the
+/// only thing keeping the read in the one file the architecture test exempts
+/// from the AD-5 rule. If a second directory genuinely needs one of these, that
+/// is an architecture decision, not a test edit.
+const Map<String, String> _directoryScopedImports = <String, String>{
+  'flutter_timezone': 'lib/platform/clock',
 };
 
 /// Identifiers that would mean a permission is being requested, whatever the
@@ -78,12 +109,18 @@ const Map<String, String> _directoriesThisStoryDoesNotOwn = <String, String>{
 /// `lib/features/medicines` -- but every provider in this project lives in
 /// `lib/app/`, so a `medicineRepositoryProvider` added there passed a test
 /// whose name said no provider was added.
-const Map<String, String> _providerHomes = <String, String>{
-  'lib/app':
-      'This story ends at the port. Wiring the repository into the '
-      'composition root is Story 1.5, which is also the first story with a '
-      'caller for it.',
-};
+///
+/// EMPTY as of 2026-09-08. Its one entry forbade `lib/app/` from naming
+/// `MedicineRepository`, because Story 1.4 ended at the port and a screen
+/// arriving early would have skipped the design review the add flow needed.
+/// Story 1.5 is that flow and the port's first caller, so it retires the entry
+/// -- which is the house rule for this file: each guard is deleted by the story
+/// that is allowed to do the thing.
+///
+/// Left in place rather than removed so the next story that ends at a port has
+/// the mechanism to hand, and so the test below stays honest about guarding
+/// nothing rather than being quietly deleted.
+const Map<String, String> _providerHomes = <String, String>{};
 
 /// Identifiers that must not appear in a domain model file, by file.
 ///
@@ -165,6 +202,31 @@ void main() {
     }
   });
 
+  test('a directory-scoped package is imported only in its one directory', () {
+    // The guard AD-9's amendment needs. Reading the device zone is now legal,
+    // in one adapter -- so this asserts the narrowness, not the ban.
+    for (final MapEntry<String, String> entry
+        in _directoryScopedImports.entries) {
+      final List<String> offenders = sources
+          .where(
+            (({String path, String source}) f) =>
+                f.source.contains('package:${entry.key}/') &&
+                !f.path.startsWith('${entry.value}/'),
+          )
+          .map((({String path, String source}) f) => f.path)
+          .toList();
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            '${offenders.join(', ')} imports ${entry.key}, which only '
+            '${entry.value}/ may. AD-5 confines every clock read to one '
+            'adapter and AD-9 permits the zone to be read there; a second '
+            'reader is an architecture decision, not a test edit.',
+      );
+    }
+  });
+
   test('nothing asks the OS for a permission', () {
     for (final ({String path, String source}) file in sources) {
       for (final MapEntry<String, String> entry
@@ -203,7 +265,33 @@ void main() {
     }
   });
 
-  test('the repository is not wired into the composition root yet', () {
+  test('a port with no caller yet is kept out of the composition root', () {
+    // Named for the mechanism, not for one story's absence. It was called "the
+    // repository is not wired into the composition root yet" until 2026-09-08,
+    // when Story 1.5 wired it -- at which point the old name was a false claim
+    // sitting on top of a loop over an empty map, which passes for the worst
+    // possible reason.
+    //
+    // So the guard now states both halves. Below: whatever `_providerHomes`
+    // still forbids is really absent. Here: the entry Story 1.5 retired is
+    // really gone, so an empty map means "nothing is pending" rather than
+    // "someone deleted the guard".
+    expect(
+      _providerHomes,
+      isEmpty,
+      reason:
+          'A pending port is listed here. If that is Story 1.5\'s repository '
+          'entry, it should have been retired when the add flow landed.',
+    );
+    expect(
+      File('lib/app/medicine_repository_provider.dart').existsSync(),
+      isTrue,
+      reason:
+          'The repository entry was retired from _providerHomes, which only '
+          'Story 1.5 may do, and only because it wires the repository. If the '
+          'binding is gone, the guard was relaxed rather than satisfied.',
+    );
+
     for (final MapEntry<String, String> home in _providerHomes.entries) {
       final Directory directory = Directory(home.key);
       expect(

@@ -14,6 +14,14 @@
 // a violet glow under a white card looks like a bug, and a black shadow under
 // the primary button makes it look switched off.
 //
+// The two accent values were `0 6px 16px .28` and `0 10px 22px .30` until
+// 2026-09-07. Both were measured, but the FIRST was a single-use shadow while
+// `0 8px 20px rgba(108,92,231,.3)` — the most-used accent shadow in the design,
+// carrying the selected day pill — matched neither token exactly. The radius
+// scale was consolidated on the rule that the most-used values stay exact; this
+// family had not been held to it. Both are now measured values, and `strong` is
+// stronger in all three dimensions rather than in two.
+//
 // A note on the blur number. CSS and Flutter both call it a blur radius but
 // arrive at the Gaussian sigma differently, so a value transcribed 1:1 is
 // visually very close, not identical. The number is transcribed rather than
@@ -51,15 +59,15 @@ abstract final class MTElevation {
   ///
   /// Tinted with the accent, not with black. See the file comment.
   static const BoxShadow accent = BoxShadow(
-    color: Color.fromRGBO(108, 92, 231, 0.28),
-    offset: Offset(0, 6),
-    blurRadius: 16,
+    color: Color.fromRGBO(108, 92, 231, 0.30),
+    offset: Offset(0, 8),
+    blurRadius: 20,
   );
 
   /// `elevation/accent-strong` — the primary action at its most prominent: the
   /// one button on the screen the eye should land on first.
   static const BoxShadow accentStrong = BoxShadow(
-    color: Color.fromRGBO(108, 92, 231, 0.30),
+    color: Color.fromRGBO(108, 92, 231, 0.32),
     offset: Offset(0, 10),
     blurRadius: 22,
   );

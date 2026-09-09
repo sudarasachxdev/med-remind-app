@@ -12,64 +12,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/features/onboarding/presentation/onboarding_copy.dart';
 
-/// Words that praise, urge or scold. EXPERIENCE.md's "Don't" column, made
-/// concrete: encouragement, streak language, and the imperative nagging that
-/// "Don't forget again" is the archetype of.
-const List<String> _encouragement = <String>[
-  'amazing',
-  'awesome',
-  'badge',
-  'congrat',
-  'don\'t forget',
-  'excellent',
-  'fantastic',
-  'good job',
-  'great',
-  'keep going',
-  'keep it up',
-  'nice work',
-  'perfect',
-  'point',
-  'proud',
-  'reward',
-  'score',
-  'streak',
-  'success',
-  'well done',
-  'you can do it',
-];
-
-/// Clinical vocabulary. The product records what the user tells it and gives no
-/// medical advice, so it must not talk like a chart.
-const List<String> _clinical = <String>[
-  'adherence',
-  'administer',
-  'clinical',
-  'compliance',
-  'contraindicat',
-  'diagnos',
-  'dosage regimen',
-  'patient',
-  'prescrib',
-  'prescription',
-  'regimen',
-  'symptom',
-  'therapy',
-  'treatment plan',
-];
-
-/// Words that characterise a refusal. Declining notifications is a legitimate
-/// choice and must never be labelled as a failure to do the right thing.
-const List<String> _judgesDeclining = <String>[
-  'deny',
-  'no thanks',
-  'not recommended',
-  'reduced',
-  'limited experience',
-  'won\'t work',
-  'will not work',
-  'miss out',
-];
+import 'support/voice_rules.dart';
 
 /// The strings that are prose, and therefore must be complete sentences.
 /// Button labels, times and row labels are not.
@@ -108,7 +51,7 @@ void main() {
     test('no encouragement and no streak language', () {
       for (final String copy in OnboardingCopy.all) {
         final String lower = copy.toLowerCase();
-        for (final String banned in _encouragement) {
+        for (final String banned in encouragementWords) {
           expect(
             lower,
             isNot(contains(banned)),
@@ -121,7 +64,7 @@ void main() {
     test('no clinical phrasing', () {
       for (final String copy in OnboardingCopy.all) {
         final String lower = copy.toLowerCase();
-        for (final String banned in _clinical) {
+        for (final String banned in clinicalWords) {
           expect(
             lower,
             isNot(contains(banned)),
@@ -134,7 +77,7 @@ void main() {
     test('declining is never framed as the lesser choice', () {
       for (final String copy in OnboardingCopy.all) {
         final String lower = copy.toLowerCase();
-        for (final String banned in _judgesDeclining) {
+        for (final String banned in judgementalWords) {
           expect(
             lower,
             isNot(contains(banned)),

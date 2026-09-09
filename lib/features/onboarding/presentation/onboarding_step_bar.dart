@@ -1,30 +1,25 @@
-// The step progress bar: flat segments that fill as steps complete.
+// Onboarding's use of the shared step progress bar.
 //
-// DESIGN.md's component spec is "flat 4px segments, filled `accent` as steps
-// complete. Used in onboarding (3) and add-medicine (3)." Height comes from
-// `MTSpacing.s1`, which *is* 4, so the number appears nowhere.
+// The bar itself moved to `lib/shared/widgets/mt_step_progress_bar.dart` in
+// Story 1.5, which is the second caller this file's own comment said would
+// shape it: "It lives beside the panels rather than in `shared/widgets/`
+// because add-medicine, the other user, is Story 1.5. Promoting it then -- with
+// two real callers to shape it -- beats guessing its parameters now."
 //
-// The unfilled segment is `MTColors.borderHairline`. The mock's onboarding
-// block sets it with `onb2`/`onb3`, which resolve to `#EDECF5` when the step is
-// not yet reached -- and `#EDECF5` is exactly `border-hairline`, so this needs
-// no invention and no approximation. An earlier pass used `accentWash` here by
-// analogy with the Record card's day-bars; that was a guess, and the mock
-// disagrees with it.
+// What is left here is the one thing that is onboarding's and not shared: the
+// translation from an [OnboardingPanel] to a position, a total and the
+// sentence a screen reader hears. The shared widget deliberately knows about
+// none of those, because a bar that knew about `OnboardingPanel` could not
+// also serve `AddMedicineStep`.
 //
-// Neither segment's contrast is asserted in `test/design_tokens_test.dart`'s
-// `_contrastPairs`, and deliberately: neither carries a word. DESIGN.md's contrast note licenses exactly this --
-// "if a later story wants a genuinely lighter tone, that tone is decoration: a
-// hairline, an inactive dot, something where nothing is being read." The bar's
-// meaning is carried by [OnboardingCopy.stepLabel], which a screen reader
-// announces and which no colour is involved in.
-//
-// It lives beside the panels rather than in `shared/widgets/` because
-// add-medicine, the other user, is Story 1.5. Promoting it then -- with two
-// real callers to shape it -- beats guessing its parameters now.
+// The wrapper is kept rather than being replaced at the call site so that the
+// panel-to-position mapping stays a named, testable thing --
+// `onboarding_screen_test.dart` finds the bar by this type and counts its
+// filled segments.
 
 import 'package:flutter/material.dart';
 
-import '../../../shared/design/design.dart';
+import '../../../shared/widgets/mt_step_progress_bar.dart';
 import '../onboarding_panel.dart';
 import 'onboarding_copy.dart';
 
@@ -39,30 +34,12 @@ class OnboardingStepBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: OnboardingCopy.stepLabel(panel.step, OnboardingPanel.count),
-      // The segments say nothing; the label above says all of it. Without this
-      // a screen reader would announce three anonymous containers.
-      excludeSemantics: true,
-      child: Row(
-        children: <Widget>[
-          for (final OnboardingPanel segment in OnboardingPanel.values) ...[
-            if (!segment.isFirst) const SizedBox(width: MTSpacing.s2),
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: segment.index <= panel.index
-                      ? MTColors.accent
-                      : MTColors.borderHairline,
-                  borderRadius: const BorderRadius.all(
-                    Radius.circular(MTRadius.pill),
-                  ),
-                ),
-                child: const SizedBox(height: MTSpacing.s1),
-              ),
-            ),
-          ],
-        ],
+    return MTStepProgressBar(
+      step: panel.step,
+      total: OnboardingPanel.count,
+      semanticsLabel: OnboardingCopy.stepLabel(
+        panel.step,
+        OnboardingPanel.count,
       ),
     );
   }

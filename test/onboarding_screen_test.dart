@@ -29,6 +29,8 @@ import 'package:go_router/go_router.dart';
 import 'package:med_remind_app/shared/design/design.dart';
 
 import 'support/fake_onboarding_state_store.dart';
+import 'support/fixed_clock.dart';
+import 'support/unused_medicine_repository.dart';
 
 /// The design's reference device frame: 402 x 874 logical pixels (iOS).
 const Size _referenceFrame = Size(402, 874);
@@ -351,7 +353,14 @@ void main() {
       expect(reported, isNotEmpty, reason: 'and the failure really surfaced');
 
       await tester.pumpWidget(
-        MediTrackerApp(overrides: startupOverrides(store, completed)),
+        MediTrackerApp(
+          overrides: startupOverrides(
+            store: store,
+            completed: completed,
+            medicineRepository: const UnusedMedicineRepository(),
+            clock: FixedClock(),
+          ),
+        ),
       );
 
       expect(find.byType(OnboardingScreen), findsOneWidget);
@@ -378,7 +387,14 @@ void main() {
 
       final bool completed = await readOnboardingCompletedAtStartup(store);
       await tester.pumpWidget(
-        MediTrackerApp(overrides: startupOverrides(store, completed)),
+        MediTrackerApp(
+          overrides: startupOverrides(
+            store: store,
+            completed: completed,
+            medicineRepository: const UnusedMedicineRepository(),
+            clock: FixedClock(),
+          ),
+        ),
       );
 
       expect(store.writes, 0);

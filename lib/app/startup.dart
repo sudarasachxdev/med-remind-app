@@ -19,7 +19,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/db/app_database.dart';
+import '../domain/port/clock.dart';
+import '../domain/port/medicine_repository.dart';
 import '../domain/port/onboarding_state_store.dart';
+import '../platform/clock/system_clock.dart';
+import 'clock_provider.dart';
+import 'medicine_repository_provider.dart';
 import 'onboarding_completed_at_startup_provider.dart';
 import 'onboarding_state_store_provider.dart';
 
@@ -90,18 +95,78 @@ Future<bool> readOnboardingCompletedAtStartup(
   }
 }
 
+/// Resolves the device's IANA zone for the composition root.
+///
+/// Returns a [SystemClock] over the resolved zone, or an [UnresolvedZoneClock]
+/// when the platform cannot name it. The fallback still answers `now()`, so the
+/// app launches and Home renders; it throws only on `ianaTimezone`, which is
+/// exactly the read that would otherwise persist a wrong zone.
+///
+/// The failure is surfaced on both channels, for the reasons
+/// [readOnboardingCompletedAtStartup] gives. What it never does is rethrow:
+/// refusing to launch over a zone the user may not need today is worse than
+/// launching without it.
+///
+/// AD-6 is why there is no third option. A placeholder zone would let the save
+/// button work and store something false -- and unlike a missed onboarding
+/// panel, that error is permanent and is read back as truth by Dose
+/// resolution.
+Future<Clock> resolveClockAtStartup({
+  Duration timeout = startupReadTimeout,
+}) async {
+  try {
+    return await SystemClock.resolve().timeout(timeout);
+  } on Object catch (error, stackTrace) {
+    final ClockZoneUnavailable cause = error is ClockZoneUnavailable
+        ? error
+        : ClockZoneUnavailable('$error');
+    const String message =
+        'Could not resolve the device timezone. The app will run, but saving a '
+        'Schedule will fail rather than store a zone we had to guess (AD-6).';
+    developer.log(
+      message,
+      name: startupLogName,
+      error: error,
+      stackTrace: stackTrace,
+      level: 1000,
+    );
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: startupLogName,
+        context: ErrorDescription(message),
+      ),
+    );
+    return UnresolvedZoneClock(cause);
+  }
+}
+
 /// The provider bindings the app is launched with.
 ///
 /// This is the composition root's whole output, extracted from `main()` so it
-/// can be fed a fake store and read back out of a `ProviderContainer`. Both
-/// overrides are required in production and both are easy to get silently
-/// wrong -- dropping the store binding is invisible until a user taps
-/// something, and inverting [completed] inverts the story -- so neither is
-/// written at a call site that no test can reach.
-List<Override> startupOverrides(OnboardingStateStore store, bool completed) {
+/// can be fed fakes and read back out of a `ProviderContainer`. Every override
+/// is required in production and every one is easy to get silently wrong --
+/// dropping the store binding is invisible until a user taps something, and
+/// inverting [completed] inverts the story -- so none is written at a call site
+/// that no test can reach.
+///
+/// The parameters are NAMED, and were positional until Story 1.5 took the count
+/// from two to four. Four positional arguments, two of them interchangeable
+/// object types, is how a binding ends up swapped: the compiler cannot tell a
+/// store from a repository at the call site, and a test that swapped them would
+/// still read plausibly. Named arguments make the swap unwriteable.
+List<Override> startupOverrides({
+  required OnboardingStateStore store,
+  required bool completed,
+  required MedicineRepository medicineRepository,
+  required Clock clock,
+}) {
   return <Override>[
     onboardingStateStoreProvider.overrideWithValue(store),
     onboardingCompletedAtStartupProvider.overrideWithValue(completed),
+    medicineRepositoryProvider.overrideWithValue(medicineRepository),
+    clockProvider.overrideWithValue(clock),
   ];
 }
 

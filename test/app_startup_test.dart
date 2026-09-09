@@ -20,10 +20,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/onboarding_completed_at_startup_provider.dart';
 import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
+import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 
 import 'support/fake_onboarding_state_store.dart';
+import 'support/fixed_clock.dart';
+import 'support/unused_medicine_repository.dart';
 import 'support/recording_interceptor.dart';
 
 void main() {
@@ -157,12 +161,17 @@ void main() {
 
   group('startupOverrides', () {
     // The composition root's whole output. Extracted from `main()` precisely so
-    // these four assertions can exist.
+    // these assertions can exist.
 
     test('binds the store the composition root was given', () {
       final store = FakeOnboardingStateStore();
       final container = ProviderContainer(
-        overrides: startupOverrides(store, false),
+        overrides: startupOverrides(
+          store: store,
+          completed: false,
+          medicineRepository: const UnusedMedicineRepository(),
+          clock: FixedClock(),
+        ),
       );
       addTearDown(container.dispose);
 
@@ -179,7 +188,12 @@ void main() {
       final store = FakeOnboardingStateStore(completed: true);
 
       final completed = ProviderContainer(
-        overrides: startupOverrides(store, true),
+        overrides: startupOverrides(
+          store: store,
+          completed: true,
+          medicineRepository: const UnusedMedicineRepository(),
+          clock: FixedClock(),
+        ),
       );
       addTearDown(completed.dispose);
       expect(
@@ -190,7 +204,12 @@ void main() {
       );
 
       final fresh = ProviderContainer(
-        overrides: startupOverrides(store, false),
+        overrides: startupOverrides(
+          store: store,
+          completed: false,
+          medicineRepository: const UnusedMedicineRepository(),
+          clock: FixedClock(),
+        ),
       );
       addTearDown(fresh.dispose);
       expect(
@@ -202,9 +221,73 @@ void main() {
       );
     });
 
-    test('binds both providers and nothing else', () {
-      expect(startupOverrides(FakeOnboardingStateStore(), false), hasLength(2));
+    test('binds all four providers and nothing else', () {
+      // A count, and a deliberate pause. It said `hasLength(2)` and "binds
+      // both providers" until Story 1.5 added the repository and the clock --
+      // and it is the assertion that made that addition a decision rather than
+      // a silent widening of the composition root. Bump it when you mean to.
+      expect(
+        startupOverrides(
+          store: FakeOnboardingStateStore(),
+          completed: false,
+          medicineRepository: const UnusedMedicineRepository(),
+          clock: FixedClock(),
+        ),
+        hasLength(4),
+      );
     });
+  });
+
+  group('the providers with no safe default', () {
+    // Both providers' docs claim they throw "loudly" without an override, and
+    // neither claim was checked until 2026-09-08 -- a mutation that gave
+    // `clockProvider` a quiet default passed the whole suite. The existing
+    // `onboardingStateStoreProvider` group below had this test from the start;
+    // the two providers Story 1.5 added did not, which is how a documented
+    // guarantee becomes a comment.
+    //
+    // The stakes differ per provider and the reasons are worth keeping apart:
+    // a quiet repository default stores a medicine nowhere and tells the user
+    // it saved (PRD §9's worst bug), and a quiet clock default has to invent a
+    // timezone, which AD-6 makes permanent and Dose resolution reads as truth.
+    for (final ({String name, ProviderBase<Object?> provider}) target
+        in <({String name, ProviderBase<Object?> provider})>[
+          (
+            name: 'medicineRepositoryProvider',
+            provider: medicineRepositoryProvider,
+          ),
+          (name: 'clockProvider', provider: clockProvider),
+        ]) {
+      test('${target.name} throws until the composition root binds it', () {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+
+        expect(
+          () => container.read(target.provider),
+          throwsA(isA<UnimplementedError>()),
+          reason:
+              '${target.name} returned a value with no override. A plausible '
+              'default here is worse than a throw: it fails silently, at the '
+              'moment the user is told their medicine was saved.',
+        );
+      });
+
+      test('${target.name} says where to bind it', () {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+
+        expect(
+          () => container.read(target.provider),
+          throwsA(
+            isA<UnimplementedError>().having(
+              (UnimplementedError e) => e.message,
+              'message',
+              allOf(contains('composition root'), contains('main.dart')),
+            ),
+          ),
+        );
+      });
+    }
   });
 
   group('onboardingStateStoreProvider', () {

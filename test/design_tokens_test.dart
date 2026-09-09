@@ -204,12 +204,12 @@ const Map<String, BoxShadow> _expectedElevation = {
     blurRadius: 20,
   ),
   'accent': BoxShadow(
-    color: Color.fromRGBO(108, 92, 231, 0.28),
-    offset: Offset(0, 6),
-    blurRadius: 16,
+    color: Color.fromRGBO(108, 92, 231, 0.30),
+    offset: Offset(0, 8),
+    blurRadius: 20,
   ),
   'accentStrong': BoxShadow(
-    color: Color.fromRGBO(108, 92, 231, 0.30),
+    color: Color.fromRGBO(108, 92, 231, 0.32),
     offset: Offset(0, 10),
     blurRadius: 22,
   ),
@@ -1360,6 +1360,16 @@ void main() {
           final strong = _actualElevation[pair.$2]!;
           expect(strong.offset.dy, greaterThan(resting.offset.dy));
           expect(strong.blurRadius, greaterThan(resting.blurRadius));
+          // Alpha too, as of 2026-09-07. `accent` and `accentStrong` shared an
+          // alpha of .30 while `accent` was a single-use measurement. Taking
+          // the most-used measured value instead made all three dimensions
+          // order, so the weaker two-dimension claim is no longer the honest
+          // one.
+          expect(
+            strong.color.a,
+            greaterThan(resting.color.a),
+            reason: 'a strong shadow is not fainter than its resting form',
+          );
         }
       },
     );

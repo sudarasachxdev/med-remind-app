@@ -27,7 +27,10 @@ import 'app/router_provider.dart';
 import 'app/startup.dart';
 import 'app/theme.dart';
 import 'data/db/app_database.dart';
+import 'data/repository/drift_medicine_repository.dart';
 import 'data/repository/drift_onboarding_state_store.dart';
+import 'domain/port/clock.dart';
+import 'domain/port/medicine_repository.dart';
 import 'domain/port/onboarding_state_store.dart';
 
 Future<void> main() async {
@@ -38,6 +41,9 @@ Future<void> main() async {
   // One database per process (AD-3). Constructed here and nowhere else.
   final AppDatabase database = AppDatabase();
   final OnboardingStateStore store = DriftOnboardingStateStore(database);
+  final MedicineRepository medicineRepository = DriftMedicineRepository(
+    database,
+  );
 
   // Closes the database when the OS tears the app down. The return value is
   // discarded on purpose: the listener registers itself with the
@@ -45,12 +51,24 @@ Future<void> main() async {
   // need the handle, so they can dispose it.
   closeDatabaseOnDetach(database);
 
-  final bool onboardingCompleted = await readOnboardingCompletedAtStartup(
-    store,
-  );
+  // Both pre-frame reads, together. The onboarding flag is what the router
+  // needs synchronously; the zone is what AD-6 forbids guessing. Awaited
+  // concurrently because neither depends on the other and the splash is on
+  // screen for the duration of the slower one, not the sum.
+  final (bool onboardingCompleted, Clock clock) = await (
+    readOnboardingCompletedAtStartup(store),
+    resolveClockAtStartup(),
+  ).wait;
 
   runApp(
-    MediTrackerApp(overrides: startupOverrides(store, onboardingCompleted)),
+    MediTrackerApp(
+      overrides: startupOverrides(
+        store: store,
+        completed: onboardingCompleted,
+        medicineRepository: medicineRepository,
+        clock: clock,
+      ),
+    ),
   );
 }
 

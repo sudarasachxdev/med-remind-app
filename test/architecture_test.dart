@@ -97,8 +97,28 @@ import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/source/line_info.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The only `package:` prefix a domain file may import (AD-1).
-const _domainAllowedPackagePrefix = 'package:meta/';
+/// The `package:` prefixes a domain file may import (AD-1).
+///
+/// Amended 2026-09-09 to admit `package:timezone/` alongside `package:meta/`.
+/// AD-2 requires `logicalDay()` to be evaluated in a Dose's own stored IANA
+/// zone, and Story 1.6 is the first story that implements it -- a meta-only
+/// domain cannot do zone arithmetic at all, so the original allowlist and
+/// AD-2 were in direct conflict. `package:timezone/timezone.dart` (and
+/// `data/latest.dart`, and everything under `src/`) import only
+/// `dart:collection` and `dart:typed_data`, so admitting the package does not
+/// reopen the door AD-1 exists to keep shut. What it must not admit is
+/// `package:timezone/standalone.dart`, the one entry point that imports
+/// `dart:io` -- see [_domainBannedTimezoneEntryPoint], checked separately
+/// because it does not fit an allow/ban-by-prefix shape.
+const _domainAllowedPackagePrefixes = <String>[
+  'package:meta/',
+  'package:timezone/',
+];
+
+/// The one `package:timezone/` entry point AD-1's amendment still bans: it
+/// imports `dart:io`, which is exactly what the amendment was careful not to
+/// let back in.
+const _domainBannedTimezoneEntryPoint = 'package:timezone/standalone.dart';
 
 /// `dart:` libraries that bind the domain to a platform, and so are banned by
 /// AD-1. Other `dart:` core libraries (`dart:async`, `dart:math`,
@@ -505,6 +525,21 @@ void main() {
         expect(check("import 'dart:math';"), isEmpty);
         expect(check("import 'dart:collection';"), isEmpty);
         expect(check("import 'dart:convert';"), isEmpty);
+      },
+    );
+
+    test('package:timezone is admitted by the 2026-09-09 AD-1 amendment', () {
+      expect(check("import 'package:timezone/timezone.dart';"), isEmpty);
+      expect(check("import 'package:timezone/data/latest.dart';"), isEmpty);
+    });
+
+    test(
+      'package:timezone/standalone.dart stays banned -- it imports dart:io',
+      () {
+        final violations = check("import 'package:timezone/standalone.dart';");
+        expect(violations, hasLength(1));
+        expect(violations.single, contains('package:timezone/standalone.dart'));
+        expect(violations.single, contains('AD-1'));
       },
     );
 
@@ -1500,7 +1535,8 @@ List<String> _domainPurityViolations(
     violations.add(
       '$relativePath $keyword $uri '
       '— AD-1: lib/domain/ is pure Dart (only relative imports, '
-      'pure dart: libraries and package:meta are permitted)',
+      'pure dart: libraries, package:meta and package:timezone -- excluding '
+      'its standalone.dart -- are permitted)',
     );
   }
 
@@ -1512,7 +1548,8 @@ List<String> _domainPurityViolations(
 /// test being edited.
 bool _isBannedInDomain(String uri) {
   if (uri.startsWith('package:')) {
-    return !uri.startsWith(_domainAllowedPackagePrefix);
+    if (uri == _domainBannedTimezoneEntryPoint) return true;
+    return !_domainAllowedPackagePrefixes.any(uri.startsWith);
   }
   if (uri.startsWith('dart:')) {
     return _domainBannedDartLibraries.contains(uri);

@@ -1,8 +1,14 @@
 // The app's routes, and the one decision about what it opens onto.
 //
-// `go_router` with named routes, per the spine's conventions table. Two routes
-// exist in this story: onboarding and Home. Both are full-screen; the tab bar
-// arrives with the other three tabs in Epic 4.
+// `go_router` with named routes, per the spine's conventions table. Three
+// routes exist: onboarding, Home, and the add-medicine flow Story 1.5 added.
+// All three are full-screen; the tab bar arrives with the other three tabs in
+// Epic 4.
+//
+// ADD-MEDICINE IS A SIBLING OF HOME, not a route beneath it. Both of its exits
+// -- Save and Cancel -- are a `go` to Home, and a nested route would leave the
+// flow on the stack underneath: a back gesture on Home would return to a step 3
+// whose medicine has already been written, offering Save again.
 //
 // ONE PLACE DECIDES THE FIRST SCREEN. [buildRouter] takes the persisted
 // onboarding flag and turns it into an initial location, and nothing else in
@@ -18,6 +24,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/add_medicine/presentation/add_medicine_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 
@@ -43,6 +50,14 @@ abstract final class MTRoutes {
 
   /// [home]'s location.
   static const String homePath = '/';
+
+  /// The three-step add-medicine flow (Story 1.5).
+  ///
+  /// A sibling of [home] rather than a child of it -- see the file comment.
+  static const String addMedicine = 'addMedicine';
+
+  /// [addMedicine]'s location.
+  static const String addMedicinePath = '/add-medicine';
 }
 
 /// Builds the router, opening onto Home when [onboardingCompleted] and onto the
@@ -109,6 +124,11 @@ GoRouter buildRouter({required bool onboardingCompleted}) {
         path: MTRoutes.onboardingPath,
         name: MTRoutes.onboarding,
         builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: MTRoutes.addMedicinePath,
+        name: MTRoutes.addMedicine,
+        builder: (context, state) => const AddMedicineScreen(),
       ),
     ],
   );
