@@ -194,6 +194,22 @@ abstract final class HomeCopy {
   static const String privacyFootnote =
       'Everything is stored on this phone. No account, no cloud.';
 
+  // --- Empty state (UX-DR16, Story 1.9) ---------------------------------------------------
+
+  /// The empty-state card's title, shown when no Medicine has been saved at
+  /// all (never when one merely has no Dose today -- see `HomePlan.hasMedicines`).
+  static const String emptyStateTitle = 'Nothing scheduled yet';
+
+  /// The empty-state card's body, beneath [emptyStateTitle]. The mock's own
+  /// words, already sentence case with no exclamation mark (UX-DR19).
+  static const String emptyStateBody =
+      'Add your first medicine and MediTracker will remind you when each '
+      'dose is due.';
+
+  // The action label itself is not a new string here: the empty state's
+  // "Add medicine" button reuses `AddMedicineCopy.screenTitle` rather than a
+  // second constant for the same three words -- see `home_screen.dart`.
+
   // --- Every string this screen says --------------------------------------
 
   /// Every string Home can show, for the Voice and Tone test.
@@ -221,5 +237,7 @@ abstract final class HomeCopy {
     overdueBannerBody(1),
     overdueBannerBody(2),
     privacyFootnote,
+    emptyStateTitle,
+    emptyStateBody,
   ];
 }

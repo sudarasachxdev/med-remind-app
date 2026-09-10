@@ -120,8 +120,49 @@ void main() {
         expect(plan.doses, isEmpty);
         expect(plan.weekStrip, hasLength(7));
         expect(plan.weekStrip.first.isToday, isTrue);
+        expect(
+          plan.hasMedicines,
+          isFalse,
+          reason:
+              'Story 1.9\'s empty state gates on this, not on '
+              'dosesScheduled == 0',
+        );
       },
     );
+  });
+
+  group('Medicine exists, none due today (this story\'s own matrix row)', () {
+    test('a sparse (every 5 days) Schedule with no Dose today still has '
+        'hasMedicines true -- the one case Story 1.8 did not distinguish '
+        'from true-empty', () async {
+      final c = buildContainer();
+      final Medicine medicine = await addMedicine(c.medicines);
+      // Occurrences fall on the 7th (start), 12th, 17th... of September --
+      // never on `defaultNow`'s the 9th, so today's own list is empty even
+      // though the Medicine is a real, saved regimen.
+      await c.medicines.addSchedule(
+        medicineId: medicine.id,
+        timeOfDay: '08:00',
+        ianaTimezone: FixedClock.defaultZone,
+        frequency: Frequency.everyNDays,
+        intervalDays: 5,
+        dosageAmount: 1,
+      );
+
+      final HomePlan plan = await c.container.read(
+        homePlanControllerProvider.future,
+      );
+
+      expect(
+        plan.hasMedicines,
+        isTrue,
+        reason:
+            'a Medicine on a sparse Schedule is a real saved regimen, '
+            'not "nothing scheduled yet"',
+      );
+      expect(plan.dosesScheduled, 0);
+      expect(plan.doses, isEmpty);
+    });
   });
 
   group('Doses exist, none acted on (the spec\'s own row)', () {
@@ -328,6 +369,7 @@ void main() {
             homePlanControllerProvider.future,
           );
           expect(before.dosesScheduled, 0);
+          expect(before.hasMedicines, isFalse);
 
           // The real save path a user's "Add medicine" flow takes --
           // `MedicineRepository`, never a Dose constructed and inserted by
@@ -357,6 +399,7 @@ void main() {
 
           expect(plan.dosesScheduled, 1);
           expect(plan.doses.single.dose.medicineName, 'Atorvastatin');
+          expect(plan.hasMedicines, isTrue);
         },
       );
     },

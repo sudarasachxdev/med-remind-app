@@ -9,6 +9,13 @@
 // outright, and the plan updates only because the provider itself reruns on
 // remount (`home_plan_controller.dart`'s own file comment).
 //
+// STORY 1.9 adds one branch, not a rewrite: `_HomePlanBody` renders the week
+// strip unconditionally (the mock's own `isHome` block draws it before either
+// alternative, and this spec's own matrix never lists it as absent), then
+// either `_PopulatedPlan` -- Story 1.8's progress card, overdue banner and
+// dose list, unchanged -- or `EmptyStateCard`, keyed on `HomePlan.hasMedicines`
+// and never on `dosesScheduled == 0` (this spec's own Boundaries).
+//
 // THE GREETING AND THE DATE READ THE CLOCK DIRECTLY, not through
 // `HomePlanController`. Both are also `today`'s inputs inside that controller,
 // but neither needs a Dose to exist first -- gating them behind the same
@@ -20,12 +27,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/clock_provider.dart';
+import '../../../app/router.dart';
 import '../../../shared/design/design.dart';
+import '../../add_medicine/presentation/add_medicine_copy.dart';
 import '../application/home_plan_controller.dart';
 import 'dose_card.dart';
 import 'home_copy.dart';
+import 'home_empty_state.dart';
 import 'overdue_banner.dart';
 import 'progress_card.dart';
 import 'week_strip.dart';
@@ -137,8 +148,8 @@ class _DatePill extends StatelessWidget {
   }
 }
 
-/// The week strip, progress card, conditional overdue banner, and
-/// time-grouped dose list -- everything that needs a resolved [HomePlan].
+/// The week strip, then either the populated plan or the empty state --
+/// everything that needs a resolved [HomePlan].
 class _HomePlanBody extends StatelessWidget {
   const _HomePlanBody({required this.plan});
 
@@ -149,9 +160,44 @@ class _HomePlanBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        // 3. Week strip.
+        // 3. Week strip -- unconditional. See the file comment.
         WeekStrip(days: plan.weekStrip),
         const SizedBox(height: MTSpacing.s4),
+        // 4-6. The populated plan (progress card, overdue banner, dose
+        // list), or the empty-state card -- never both (Story 1.9, UX-DR16).
+        if (plan.hasMedicines)
+          _PopulatedPlan(plan: plan)
+        else
+          EmptyStateCard(
+            icon: Icons.medication,
+            title: HomeCopy.emptyStateTitle,
+            body: HomeCopy.emptyStateBody,
+            actionLabel: AddMedicineCopy.screenTitle,
+            // The same named route the add-medicine flow is reached by
+            // everywhere else in the app (`app/router.dart`'s own file
+            // comment: "go_router's named navigation needs the name") --
+            // one route, one way in, per this spec's own Boundaries.
+            onAction: () => context.goNamed(MTRoutes.addMedicine),
+          ),
+      ],
+    );
+  }
+}
+
+/// The progress card, the conditional overdue banner, and the time-grouped
+/// dose list -- Story 1.8's populated plan, extracted unchanged so
+/// `_HomePlanBody` can branch above it (Story 1.9) without touching what
+/// either branch renders.
+class _PopulatedPlan extends StatelessWidget {
+  const _PopulatedPlan({required this.plan});
+
+  final HomePlan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
         // 4. Progress card.
         ProgressCard(
           dosesTaken: plan.dosesTaken,

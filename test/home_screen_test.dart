@@ -8,16 +8,23 @@
 // bare `HomeScreen` under its own `ProviderScope`/`MaterialApp`, not the whole
 // `MediTrackerApp`: nothing here navigates (Story 2.2 owns the action sheet,
 // and the day strip does not select yet -- Story 4.4), so there is no router
-// to exercise.
+// to exercise -- EXCEPT the empty state's own "Add medicine" action (Story
+// 1.9), which is the one control on this screen that does navigate. Its own
+// group below pumps a second, minimal harness -- `pumpHomeWithRouter` -- that
+// carries a real `GoRouter` over the same two routes `app/router.dart`
+// registers, rather than promoting every test in this file to the full
+// `MediTrackerApp`.
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
+import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
@@ -25,8 +32,12 @@ import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
+import 'package:med_remind_app/features/add_medicine/domain/add_medicine_draft.dart';
+import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_copy.dart';
+import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_screen.dart';
 import 'package:med_remind_app/features/home/presentation/dose_card.dart';
 import 'package:med_remind_app/features/home/presentation/home_copy.dart';
+import 'package:med_remind_app/features/home/presentation/home_empty_state.dart';
 import 'package:med_remind_app/features/home/presentation/home_screen.dart';
 import 'package:med_remind_app/features/home/presentation/overdue_banner.dart';
 import 'package:med_remind_app/features/home/presentation/progress_card.dart';
@@ -110,6 +121,186 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  /// Pumps `HomeScreen` behind a real, minimal `GoRouter` carrying the same
+  /// two routes `app/router.dart` registers for Home and the add-medicine
+  /// flow -- so a tap on the empty state's action exercises the real
+  /// `MTRoutes.addMedicine` route rather than a stand-in. Returns the
+  /// repositories too, so a test can act on them after the first pump and
+  /// then remount `HomeScreen` to prove the screen switches with no manual
+  /// refresh.
+  Future<
+    ({GoRouter router, MedicineRepository medicines, DoseRepository doses})
+  >
+  pumpHomeWithRouter(
+    WidgetTester tester, {
+    required Future<void> Function(MedicineRepository medicines) seed,
+    DateTime? now,
+    Size viewport = _referenceFrame,
+  }) async {
+    tester.view.physicalSize = viewport * 3;
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    final AppDatabase database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final MedicineRepository medicines = DriftMedicineRepository(database);
+    final DoseRepository doses = DriftDoseRepository(database);
+
+    await seed(medicines);
+
+    final GoRouter router = GoRouter(
+      initialLocation: MTRoutes.homePath,
+      routes: <RouteBase>[
+        GoRoute(
+          path: MTRoutes.homePath,
+          name: MTRoutes.home,
+          builder: (context, state) => const HomeScreen(),
+        ),
+        GoRoute(
+          path: MTRoutes.addMedicinePath,
+          name: MTRoutes.addMedicine,
+          builder: (context, state) => const AddMedicineScreen(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          medicineRepositoryProvider.overrideWithValue(medicines),
+          doseRepositoryProvider.overrideWithValue(doses),
+          clockProvider.overrideWithValue(
+            FixedClock(instant: now ?? defaultNow),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    return (router: router, medicines: medicines, doses: doses);
+  }
+
+  group('the empty state (this story\'s own matrix)', () {
+    testWidgets(
+      'zero Medicines renders the empty-state card; the progress card, dose '
+      'list and next-dose chip are absent from the tree entirely',
+      (tester) async {
+        await pumpHome(tester, seed: (medicines) async {});
+
+        expect(find.byType(EmptyStateCard), findsOneWidget);
+        expect(find.text(HomeCopy.emptyStateTitle), findsOneWidget);
+        expect(find.text(HomeCopy.emptyStateBody), findsOneWidget);
+        expect(
+          find.widgetWithText(FilledButton, AddMedicineCopy.screenTitle),
+          findsOneWidget,
+        );
+        expect(find.byType(ProgressCard), findsNothing);
+        expect(find.byType(DoseCard), findsNothing);
+        expect(find.byType(OverdueBanner), findsNothing);
+        expect(
+          find.byType(WeekStrip),
+          findsOneWidget,
+          reason:
+              'the week strip is unconditional chrome, not part of the '
+              'empty/populated branch (the mock\'s own isHome block draws it '
+              'before either alternative)',
+        );
+      },
+    );
+
+    testWidgets(
+      'a Medicine with no Dose due today renders the populated plan, never '
+      'the empty state',
+      (tester) async {
+        await pumpHome(
+          tester,
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            // Every 5 days from `defaultStart` (2026-09-07): occurrences fall
+            // on the 7th, 12th, 17th... never on `defaultNow`'s the 9th.
+            await medicines.addSchedule(
+              medicineId: medicine.id,
+              timeOfDay: '08:00',
+              ianaTimezone: FixedClock.defaultZone,
+              frequency: Frequency.everyNDays,
+              intervalDays: 5,
+              dosageAmount: 1,
+            );
+          },
+        );
+
+        expect(find.byType(EmptyStateCard), findsNothing);
+        expect(find.text(HomeCopy.emptyStateTitle), findsNothing);
+        expect(find.byType(ProgressCard), findsOneWidget);
+        expect(find.text(HomeCopy.progressLabel(0, 0)), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'tapping "Add medicine" opens the add flow at step 1, via the real '
+      'addMedicine route',
+      (tester) async {
+        await pumpHomeWithRouter(tester, seed: (medicines) async {});
+
+        await tester.tap(
+          find.widgetWithText(FilledButton, AddMedicineCopy.screenTitle),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(AddMedicineScreen), findsOneWidget);
+        expect(find.byType(HomeScreen), findsNothing);
+        expect(
+          find.text(AddMedicineCopy.stepLabel(1, AddMedicineStep.count)),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'once a Medicine is saved and Home is returned to, the empty state is '
+      'replaced with no manual refresh',
+      (tester) async {
+        final result = await pumpHomeWithRouter(
+          tester,
+          seed: (medicines) async {},
+        );
+        expect(find.byType(EmptyStateCard), findsOneWidget);
+
+        // Leave Home for the add flow first -- a genuine location change, so
+        // `homePlanControllerProvider` (`autoDispose`) is actually torn down
+        // on the way out rather than merely rebuilt in place; `.go()` to the
+        // SAME path a widget is already showing is not the round trip a real
+        // "add medicine, then return" does.
+        result.router.go(MTRoutes.addMedicinePath);
+        await tester.pumpAndSettle();
+        expect(find.byType(AddMedicineScreen), findsOneWidget);
+
+        // The real save path a user's "Add medicine" flow takes --
+        // `MedicineRepository`, never a Dose constructed by hand -- against
+        // the SAME repository instances the pumped screen reads from. This
+        // is Story 1.9's own claim: the screen switches, not the data side,
+        // which `home_plan_test.dart`'s "First Medicine just saved" group
+        // already proves at the controller level.
+        final Medicine medicine = await addMedicine(result.medicines);
+        await addSchedule(result.medicines, medicine.id, timeOfDay: '08:00');
+
+        // "Return to Home": go_router replaces the location, which is
+        // exactly what `add_medicine_screen.dart`'s own `_save` does after a
+        // successful save -- no pull-to-refresh, no manual reload button,
+        // nothing this test reaches for beyond the navigation itself.
+        result.router.go(MTRoutes.homePath);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(HomeScreen), findsOneWidget);
+        expect(find.byType(EmptyStateCard), findsNothing);
+        expect(find.byType(ProgressCard), findsOneWidget);
+        expect(find.byType(DoseCard), findsOneWidget);
+      },
+    );
+  });
 
   group('the fixed vertical order (UX-DR23)', () {
     testWidgets(

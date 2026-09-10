@@ -103,6 +103,7 @@ final class HomePlan {
   const HomePlan({
     required this.now,
     required this.weekStrip,
+    required this.hasMedicines,
     required this.dosesTaken,
     required this.dosesScheduled,
     required this.nextDoseAt,
@@ -117,6 +118,18 @@ final class HomePlan {
 
   /// Seven rolling days, today first. See [HomeWeekDay].
   final List<HomeWeekDay> weekStrip;
+
+  /// Whether at least one Medicine has ever been saved, active or not.
+  ///
+  /// Story 1.9's own field, sourced from the exact same `allMedicines()` read
+  /// this controller already makes for the glyph lookup below -- not a
+  /// second query. Gates Home's empty state, and is deliberately NOT
+  /// `dosesScheduled == 0`: a Medicine on a sparse Schedule (`every 5 days`)
+  /// can have no Dose today, or even none anywhere in the rolling
+  /// week-strip window, while still being a real saved regimen. That case
+  /// gets the populated plan with a quiet dose list, never the empty state
+  /// (this spec's own I/O matrix).
+  final bool hasMedicines;
 
   /// How many of today's Doses have resolved to [DoseState.taken].
   ///
@@ -181,9 +194,12 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
       today,
       horizonEnd,
     );
+    // Read once and reused for both `hasMedicines` (Story 1.9) and the glyph
+    // lookup below -- this spec's own Design Notes: "one field, not a new
+    // query".
+    final List<Medicine> allMedicines = await medicineRepository.allMedicines();
     final Map<String, Medicine> medicineById = <String, Medicine>{
-      for (final Medicine medicine in await medicineRepository.allMedicines())
-        medicine.id: medicine,
+      for (final Medicine medicine in allMedicines) medicine.id: medicine,
     };
 
     final List<Dose> todaysDoses = visible
@@ -246,6 +262,7 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
     return HomePlan(
       now: now,
       weekStrip: weekStrip,
+      hasMedicines: allMedicines.isNotEmpty,
       dosesTaken: taken,
       dosesScheduled: entries.length,
       nextDoseAt: nextDoseAt,
