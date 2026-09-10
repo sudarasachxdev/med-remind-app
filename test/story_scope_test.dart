@@ -20,7 +20,11 @@
 // `doses` table -- both stories ended at a port. Story 1.7a's absence is a
 // new one: no `lib/app/` binding for `DoseRepository` either, added to
 // `_providerHomes` below exactly as Story 1.5 once had one there for
-// `MedicineRepository`.
+// `MedicineRepository`. Story 1.7b's `DoseGenerator` -- `DoseRepository`'s
+// first real caller, but from `lib/domain/service/`, not `lib/app/` -- joins
+// the same entry rather than opening a new one: it is the identical absence
+// (no Reconciler to wire it into the composition root yet, AD-9) on a second
+// type.
 
 import 'dart:io';
 
@@ -110,13 +114,24 @@ const Map<String, String> _directoriesThisStoryDoesNotOwn = <String, String>{
 /// Story 1.4 (which ended at the port) until Story 1.5 (that port's first
 /// caller) retired it -- the house rule for this file: each guard is deleted
 /// by the story that is allowed to do the thing. It stayed empty until Story
-/// 1.7a, which is in the same position Story 1.4 was: `DoseRepository` has no
-/// caller yet either, Story 1.7b is that caller, so this is the mechanism
-/// Story 1.5's retirement left waiting, used for the first time since.
+/// 1.7a, which is in the same position Story 1.4 was: `DoseRepository` had no
+/// caller yet either.
+///
+/// Story 1.7b is that caller -- but only inside `lib/domain/service/`, not
+/// `lib/app/`: `DoseGenerator` depends on `DoseRepository` the port, which is
+/// exactly what a domain service consuming a port is for (see
+/// `AddMedicineController` over `MedicineRepository`), and is not the
+/// composition root binding either type to a Drift adapter. No Reconciler
+/// exists yet to be the thing `lib/app/` would wire `DoseGenerator` into
+/// (AD-9, Epic 3), so the `DoseRepository`/`DriftDoseRepository` entry is NOT
+/// retired by this story -- it gains `DoseGenerator` as a third forbidden
+/// name on the same entry instead, the same "no caller yet" absence, one
+/// type wider.
 const Map<String, String> _providerHomes = <String, String>{
   'lib/app':
-      'Story 1.7b is DoseRepository\'s first caller. This story ends at the '
-      'port, exactly as Story 1.4 did for MedicineRepository.',
+      'Story 1.7b\'s DoseGenerator is DoseRepository\'s first caller, but '
+      'only from lib/domain/service/. No Reconciler exists yet to wire '
+      'DoseGenerator itself into the composition root (AD-9, Epic 3).',
 };
 
 /// Identifiers that must not appear in a domain model file, by file.
@@ -274,8 +289,9 @@ void main() {
     // only true once the binding landed, so a `_providerHomes` entry re-added
     // for `MedicineRepository` would be a guard that regressed rather than one
     // that still protects something. Second -- the loop below -- that whatever
-    // `_providerHomes` currently forbids (Story 1.7a's `DoseRepository` entry)
-    // is really absent from the directory it names.
+    // `_providerHomes` currently forbids (Story 1.7a's `DoseRepository` entry,
+    // joined by Story 1.7b's `DoseGenerator`) is really absent from the
+    // directory it names.
     expect(
       File('lib/app/medicine_repository_provider.dart').existsSync(),
       isTrue,
@@ -303,6 +319,7 @@ void main() {
         for (final String named in <String>[
           'DoseRepository',
           'DriftDoseRepository',
+          'DoseGenerator',
         ]) {
           expect(
             code,
