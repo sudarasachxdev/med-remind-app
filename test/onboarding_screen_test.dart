@@ -10,15 +10,22 @@
 // adapter; here a `FakeOnboardingStateStore` records reads and writes and can
 // be told to fail.
 
+import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/dose_repository_provider.dart';
+import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/onboarding_completed_at_startup_provider.dart';
 import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
 import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/app/startup.dart';
+import 'package:med_remind_app/data/db/app_database.dart';
+import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
+import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
 import 'package:med_remind_app/features/home/presentation/home_screen.dart';
 import 'package:med_remind_app/features/onboarding/presentation/escalation_timeline.dart';
 import 'package:med_remind_app/features/onboarding/presentation/onboarding_copy.dart';
@@ -30,6 +37,7 @@ import 'package:med_remind_app/shared/design/design.dart';
 
 import 'support/fake_onboarding_state_store.dart';
 import 'support/fixed_clock.dart';
+import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
 
 /// The design's reference device frame: 402 x 874 logical pixels (iOS).
@@ -359,6 +367,7 @@ void main() {
             completed: completed,
             medicineRepository: const UnusedMedicineRepository(),
             clock: FixedClock(),
+            doseRepository: const UnusedDoseRepository(),
           ),
         ),
       );
@@ -393,6 +402,7 @@ void main() {
             completed: completed,
             medicineRepository: const UnusedMedicineRepository(),
             clock: FixedClock(),
+            doseRepository: const UnusedDoseRepository(),
           ),
         ),
       );
@@ -850,11 +860,26 @@ Future<FakeOnboardingStateStore> _pumpApp(
   final FakeOnboardingStateStore effective =
       store ?? FakeOnboardingStateStore(completed: completed);
 
+  // Story 1.8: reaching Home now reads three more providers, since Home is a
+  // real screen over live-generated data rather than Story 1.3's placeholder.
+  // `UnusedMedicineRepository`/`UnusedDoseRepository` exist only to prove a
+  // provider is BOUND (`app_startup_test.dart`'s own concern) -- every method
+  // on them throws, which would fail every test below the moment `Home`
+  // actually reads one. A fresh in-memory database gives Home somewhere real,
+  // if empty, to read from instead.
+  final AppDatabase database = AppDatabase(NativeDatabase.memory());
+  addTearDown(database.close);
+
   await tester.pumpWidget(
     MediTrackerApp(
       overrides: <Override>[
         onboardingStateStoreProvider.overrideWithValue(effective),
         onboardingCompletedAtStartupProvider.overrideWithValue(completed),
+        medicineRepositoryProvider.overrideWithValue(
+          DriftMedicineRepository(database),
+        ),
+        doseRepositoryProvider.overrideWithValue(DriftDoseRepository(database)),
+        clockProvider.overrideWithValue(FixedClock()),
       ],
     ),
   );

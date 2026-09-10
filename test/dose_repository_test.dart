@@ -349,6 +349,101 @@ void main() {
     });
   });
 
+  group('dosesScheduledBetween (Story 1.8\'s range query)', () {
+    test('returns only the Doses inside the half-open window, ascending by '
+        'scheduled time', () async {
+      final Schedule schedule = await seedSchedule();
+      final Dose before = doseFor(
+        schedule,
+        scheduledLocal: DateTime(2026, 9, 8, 20, 0),
+      );
+      final Dose middle = doseFor(
+        schedule,
+        scheduledLocal: DateTime(2026, 9, 9, 20, 0),
+      );
+      final Dose early = doseFor(
+        schedule,
+        scheduledLocal: DateTime(2026, 9, 9, 8, 0),
+      );
+      final Dose onEndBoundary = doseFor(
+        schedule,
+        scheduledLocal: DateTime(2026, 9, 10, 8, 0),
+      );
+      for (final Dose dose in <Dose>[before, middle, early, onEndBoundary]) {
+        await doses.saveDose(dose);
+      }
+
+      final List<Dose> result = await doses.dosesScheduledBetween(
+        early.scheduledAt,
+        onEndBoundary.scheduledAt,
+      );
+
+      expect(
+        result,
+        equals(<Dose>[early, middle]),
+        reason:
+            'start is inclusive (early lands exactly on it), end is '
+            'exclusive (onEndBoundary must not appear), before is entirely '
+            'outside the window, and the two survivors come back in '
+            'scheduled-time order',
+      );
+    });
+
+    test('an empty window reads as an empty list', () async {
+      final Schedule schedule = await seedSchedule();
+      await doses.saveDose(doseFor(schedule));
+
+      expect(
+        await doses.dosesScheduledBetween(
+          DateTime.utc(2030, 1, 1),
+          DateTime.utc(2030, 1, 2),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('spans every Schedule and every Medicine, not just one', () async {
+      final Schedule first = await seedSchedule();
+      final Medicine second = await medicines.addMedicine(
+        name: 'Candesartan',
+        form: 'tablet',
+        dosageAmount: 1,
+        dosageUnit: 'tablet',
+        startDate: DateTime(2026, 9, 7),
+      );
+      final Schedule secondSchedule = await medicines.addSchedule(
+        medicineId: second.id,
+        timeOfDay: '09:00',
+        ianaTimezone: 'Asia/Colombo',
+        frequency: Frequency.everyDay,
+        dosageAmount: 1,
+      );
+      final Dose firstDose = doseFor(first);
+      final Dose secondDose = doseFor(
+        secondSchedule,
+        scheduledLocal: DateTime(2026, 9, 9, 9, 0),
+        medicineName: 'Candesartan',
+      );
+      await doses.saveDose(firstDose);
+      await doses.saveDose(secondDose);
+
+      // A generous explicit-UTC window rather than a naive local `DateTime`
+      // for the bounds: both Doses' `scheduledAt` are built from a real
+      // `Asia/Colombo` instant (see `doseFor`), and a bound constructed with
+      // the bare `DateTime(...)` constructor takes on the HOST machine's own
+      // offset when this repository converts it with `.toUtc()` -- which
+      // would make this assertion depend on which timezone the suite happens
+      // to run in. Two full UTC days either side of the 9th cannot miss
+      // either instant on any host.
+      final List<Dose> result = await doses.dosesScheduledBetween(
+        DateTime.utc(2026, 9, 8),
+        DateTime.utc(2026, 9, 10),
+      );
+
+      expect(result, unorderedEquals(<Dose>[firstDose, secondDose]));
+    });
+  });
+
   group('round-trip the snapshot (the spec\'s "Round-trip the snapshot" row, '
       'AD-11)', () {
     test('all four frozen fields read back unchanged, independent of the live '

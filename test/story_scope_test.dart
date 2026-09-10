@@ -17,14 +17,16 @@
 // and the message says which of the two to check.
 //
 // Story 1.4's own absences are here too: no widget, no provider and no
-// `doses` table -- both stories ended at a port. Story 1.7a's absence is a
+// `doses` table -- both stories ended at a port. Story 1.7a's absence was a
 // new one: no `lib/app/` binding for `DoseRepository` either, added to
 // `_providerHomes` below exactly as Story 1.5 once had one there for
-// `MedicineRepository`. Story 1.7b's `DoseGenerator` -- `DoseRepository`'s
-// first real caller, but from `lib/domain/service/`, not `lib/app/` -- joins
-// the same entry rather than opening a new one: it is the identical absence
-// (no Reconciler to wire it into the composition root yet, AD-9) on a second
-// type.
+// `MedicineRepository`, and Story 1.7b's `DoseGenerator` joined the same entry
+// rather than opening a new one -- the identical absence (no Reconciler to
+// wire it into the composition root yet, AD-9) on a second type. Story 1.8 is
+// `DoseRepository`'s first caller from `lib/app/` (`dose_repository_provider.dart`)
+// and, per AD-9's 2026-09-10 amendment, `DoseGenerator`'s first caller from
+// there too (`dose_generator_provider.dart`) -- so `_providerHomes` is retired
+// empty, the way Story 1.5 once retired its own `MedicineRepository` entry.
 
 import 'dart:io';
 
@@ -115,24 +117,19 @@ const Map<String, String> _directoriesThisStoryDoesNotOwn = <String, String>{
 /// caller) retired it -- the house rule for this file: each guard is deleted
 /// by the story that is allowed to do the thing. It stayed empty until Story
 /// 1.7a, which is in the same position Story 1.4 was: `DoseRepository` had no
-/// caller yet either.
+/// caller yet either, and Story 1.7b's `DoseGenerator` joined the same entry
+/// when it arrived, from `lib/domain/service/` only -- no Reconciler existed
+/// yet to wire either into the composition root (AD-9, Epic 3).
 ///
-/// Story 1.7b is that caller -- but only inside `lib/domain/service/`, not
-/// `lib/app/`: `DoseGenerator` depends on `DoseRepository` the port, which is
-/// exactly what a domain service consuming a port is for (see
-/// `AddMedicineController` over `MedicineRepository`), and is not the
-/// composition root binding either type to a Drift adapter. No Reconciler
-/// exists yet to be the thing `lib/app/` would wire `DoseGenerator` into
-/// (AD-9, Epic 3), so the `DoseRepository`/`DriftDoseRepository` entry is NOT
-/// retired by this story -- it gains `DoseGenerator` as a third forbidden
-/// name on the same entry instead, the same "no caller yet" absence, one
-/// type wider.
-const Map<String, String> _providerHomes = <String, String>{
-  'lib/app':
-      'Story 1.7b\'s DoseGenerator is DoseRepository\'s first caller, but '
-      'only from lib/domain/service/. No Reconciler exists yet to wire '
-      'DoseGenerator itself into the composition root (AD-9, Epic 3).',
-};
+/// Retired empty by Story 1.8, which is `DoseRepository`'s first caller from
+/// `lib/app/` (`dose_repository_provider.dart`) and, under AD-9's 2026-09-10
+/// amendment permitting Home's provider layer to call
+/// `DoseGenerator.generate(now)` directly, `DoseGenerator`'s first caller from
+/// there too (`dose_generator_provider.dart`). Kept as an empty map, the same
+/// house rule the file comment states: a guard is retired by deleting its
+/// entry, not by deleting the mechanism, so the next port with no caller yet
+/// has somewhere to be listed.
+const Map<String, String> _providerHomes = <String, String>{};
 
 /// Identifiers that must not appear in a domain model file, by file.
 ///
@@ -284,22 +281,28 @@ void main() {
     // was a false claim sitting on top of a loop over an empty map, which
     // passes for the worst possible reason.
     //
-    // So the guard states two things. First, that the entry Story 1.5 retired
-    // stayed retired: `medicine_repository_provider.dart` exists, which is
-    // only true once the binding landed, so a `_providerHomes` entry re-added
-    // for `MedicineRepository` would be a guard that regressed rather than one
-    // that still protects something. Second -- the loop below -- that whatever
-    // `_providerHomes` currently forbids (Story 1.7a's `DoseRepository` entry,
-    // joined by Story 1.7b's `DoseGenerator`) is really absent from the
-    // directory it names.
-    expect(
-      File('lib/app/medicine_repository_provider.dart').existsSync(),
-      isTrue,
-      reason:
-          'The repository entry was retired from _providerHomes, which only '
-          'Story 1.5 may do, and only because it wires the repository. If the '
-          'binding is gone, the guard was relaxed rather than satisfied.',
-    );
+    // So the guard states two things. First, that every entry a past story
+    // retired stayed retired: the binding each one names exists, which is
+    // only true once it actually landed, so a `_providerHomes` entry re-added
+    // for one of them would be a guard that regressed rather than one that
+    // still protects something. Second -- the loop below -- that whatever
+    // `_providerHomes` currently forbids is really absent from the directory
+    // it names. It is empty as of Story 1.8, which is why the loop runs zero
+    // times; it stays in the test, ready for the next port with no caller yet.
+    for (final String path in <String>[
+      'lib/app/medicine_repository_provider.dart',
+      'lib/app/dose_repository_provider.dart',
+      'lib/app/dose_generator_provider.dart',
+    ]) {
+      expect(
+        File(path).existsSync(),
+        isTrue,
+        reason:
+            '$path\'s entry was retired from _providerHomes, which only the '
+            'story that wires it may do. If the binding is gone, the guard '
+            'was relaxed rather than satisfied.',
+      );
+    }
 
     for (final MapEntry<String, String> home in _providerHomes.entries) {
       final Directory directory = Directory(home.key);

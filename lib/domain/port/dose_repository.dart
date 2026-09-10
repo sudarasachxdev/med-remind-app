@@ -43,11 +43,13 @@ import '../model/domain_failure.dart';
 /// A read of something absent is not a failure: [findDose] answers `null` and
 /// [dosesForSchedule] answers an empty list.
 ///
-/// **What this port deliberately does not have.** No range query, no query by
-/// Medicine, no bulk upsert -- Story 1.7b, this port's only caller so far,
-/// needs exactly the four methods below. A range query is Story 1.8's to add
-/// when it exists to call it, the same discipline `MedicineRepository` was
-/// held to through Story 1.4.
+/// **What this port deliberately does not have.** No query by Medicine, no
+/// bulk upsert -- Story 1.7b, this port's first caller, needed exactly the
+/// four methods below with no range query. Story 1.8 is the first caller that
+/// needs "every Dose across every Schedule, in a window" -- Home's daily plan
+/// -- and [dosesScheduledBetween] is that query, added only once a caller
+/// existed to need it, the same discipline `MedicineRepository` was held to
+/// through Story 1.4.
 ///
 /// **What this port never does.** [saveDose] writes whatever [Dose] it is
 /// given, including `takenAt`, `skippedAt`, `snoozedUntil` and `snoozeCount` --
@@ -86,6 +88,26 @@ abstract interface class DoseRepository {
   /// Deletes the Dose with [id]. Idempotent: deleting an id that is not
   /// stored is not an error, matching `MedicineRepository.deleteSchedule`.
   Future<void> deleteDose(String id);
+
+  /// Every Dose whose [Dose.scheduledAt] falls in `[start, end)`, across every
+  /// Schedule and every Medicine, ascending by [Dose.scheduledAt].
+  ///
+  /// Half-open on purpose: [start] is inclusive and [end] is exclusive, so a
+  /// caller asking for one calendar day after another -- as Home's controller
+  /// does, today then tomorrow -- can never double-count a Dose landing
+  /// exactly on the shared boundary, and never leaves a one-instant gap
+  /// between the two calls either.
+  ///
+  /// Unlike [dosesForSchedule], order **is** part of this method's contract:
+  /// Home's daily plan is fixed-order by scheduled time (UX-DR23), and this is
+  /// the query that exists to answer it -- the range query
+  /// `dose_repository.dart`'s own doc long named as Story 1.8's to add, now
+  /// that Story 1.8 is the caller that needs it.
+  ///
+  /// Empty when nothing is scheduled in the window. Throws
+  /// [DoseRecordNotReadableFailure] under the same conditions [dosesForSchedule]
+  /// would.
+  Future<List<Dose>> dosesScheduledBetween(DateTime start, DateTime end);
 }
 
 /// The base type of every failure [DoseRepository] throws.

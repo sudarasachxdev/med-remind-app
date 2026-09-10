@@ -80,6 +80,32 @@ final class DriftDoseRepository implements DoseRepository {
     )..where(($DosesTable t) => t.id.equals(id))).go();
   }
 
+  @override
+  Future<List<Dose>> dosesScheduledBetween(DateTime start, DateTime end) async {
+    // `scheduled_utc` is stored ISO-8601 with an explicit UTC offset (see
+    // `_doseToRow`), so both bounds are converted the same way before the
+    // comparison -- a lexicographic TEXT comparison sorts identically to the
+    // instants themselves only when every value being compared shares one
+    // format. AD-6: this column exists purely for ordering and range queries
+    // such as this one; `scheduledLocal` + `ianaTimezone` remains the stored
+    // truth.
+    final String startUtc = start.toUtc().toIso8601String();
+    final String endUtc = end.toUtc().toIso8601String();
+
+    final List<DoseRow> rows =
+        await (_database.select(_database.doses)
+              ..where(
+                ($DosesTable t) =>
+                    t.scheduledUtc.isBiggerOrEqualValue(startUtc) &
+                    t.scheduledUtc.isSmallerThanValue(endUtc),
+              )
+              ..orderBy(<OrderClauseGenerator<$DosesTable>>[
+                ($DosesTable t) => OrderingTerm(expression: t.scheduledUtc),
+              ]))
+            .get();
+    return rows.map(_doseFromRow).toList();
+  }
+
   // ---------------------------------------------------------------------------
   // Mapping. Every conversion between a row and a `Dose` goes through exactly
   // one of the two functions below, mirroring `DriftMedicineRepository`'s own

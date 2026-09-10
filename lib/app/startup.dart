@@ -20,10 +20,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/db/app_database.dart';
 import '../domain/port/clock.dart';
+import '../domain/port/dose_repository.dart';
 import '../domain/port/medicine_repository.dart';
 import '../domain/port/onboarding_state_store.dart';
 import '../platform/clock/system_clock.dart';
 import 'clock_provider.dart';
+import 'dose_repository_provider.dart';
 import 'medicine_repository_provider.dart';
 import 'onboarding_completed_at_startup_provider.dart';
 import 'onboarding_state_store_provider.dart';
@@ -156,17 +158,26 @@ Future<Clock> resolveClockAtStartup({
 /// object types, is how a binding ends up swapped: the compiler cannot tell a
 /// store from a repository at the call site, and a test that swapped them would
 /// still read plausibly. Named arguments make the swap unwriteable.
+///
+/// [doseRepository] is Story 1.8's own addition, the fifth binding. Unlike
+/// [medicineRepository] and [clock], it has no derived sibling bound alongside
+/// it here: `doseGeneratorProvider` composes [medicineRepository] and
+/// [doseRepository] itself once both are bound, the same way `routerProvider`
+/// composes `onboardingCompletedAtStartupProvider` rather than being listed
+/// here.
 List<Override> startupOverrides({
   required OnboardingStateStore store,
   required bool completed,
   required MedicineRepository medicineRepository,
   required Clock clock,
+  required DoseRepository doseRepository,
 }) {
   return <Override>[
     onboardingStateStoreProvider.overrideWithValue(store),
     onboardingCompletedAtStartupProvider.overrideWithValue(completed),
     medicineRepositoryProvider.overrideWithValue(medicineRepository),
     clockProvider.overrideWithValue(clock),
+    doseRepositoryProvider.overrideWithValue(doseRepository),
   ];
 }
 

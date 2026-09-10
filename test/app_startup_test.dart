@@ -21,12 +21,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/onboarding_completed_at_startup_provider.dart';
 import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 
 import 'support/fake_onboarding_state_store.dart';
 import 'support/fixed_clock.dart';
+import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
 import 'support/recording_interceptor.dart';
 
@@ -171,6 +173,7 @@ void main() {
           completed: false,
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
+          doseRepository: const UnusedDoseRepository(),
         ),
       );
       addTearDown(container.dispose);
@@ -193,6 +196,7 @@ void main() {
           completed: true,
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
+          doseRepository: const UnusedDoseRepository(),
         ),
       );
       addTearDown(completed.dispose);
@@ -209,6 +213,7 @@ void main() {
           completed: false,
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
+          doseRepository: const UnusedDoseRepository(),
         ),
       );
       addTearDown(fresh.dispose);
@@ -221,19 +226,21 @@ void main() {
       );
     });
 
-    test('binds all four providers and nothing else', () {
+    test('binds all five providers and nothing else', () {
       // A count, and a deliberate pause. It said `hasLength(2)` and "binds
-      // both providers" until Story 1.5 added the repository and the clock --
-      // and it is the assertion that made that addition a decision rather than
-      // a silent widening of the composition root. Bump it when you mean to.
+      // both providers" until Story 1.5 added the repository and the clock,
+      // then `hasLength(4)` until Story 1.8 added the dose repository -- each
+      // bump is the assertion that made the addition a decision rather than a
+      // silent widening of the composition root. Bump it when you mean to.
       expect(
         startupOverrides(
           store: FakeOnboardingStateStore(),
           completed: false,
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
+          doseRepository: const UnusedDoseRepository(),
         ),
-        hasLength(4),
+        hasLength(5),
       );
     });
   });
@@ -248,8 +255,10 @@ void main() {
     //
     // The stakes differ per provider and the reasons are worth keeping apart:
     // a quiet repository default stores a medicine nowhere and tells the user
-    // it saved (PRD §9's worst bug), and a quiet clock default has to invent a
-    // timezone, which AD-6 makes permanent and Dose resolution reads as truth.
+    // it saved (PRD §9's worst bug), a quiet clock default has to invent a
+    // timezone, which AD-6 makes permanent and Dose resolution reads as truth,
+    // and a quiet dose-repository default would have Home read an empty plan
+    // forever with nothing on screen saying why.
     for (final ({String name, ProviderBase<Object?> provider}) target
         in <({String name, ProviderBase<Object?> provider})>[
           (
@@ -257,6 +266,7 @@ void main() {
             provider: medicineRepositoryProvider,
           ),
           (name: 'clockProvider', provider: clockProvider),
+          (name: 'doseRepositoryProvider', provider: doseRepositoryProvider),
         ]) {
       test('${target.name} throws until the composition root binds it', () {
         final container = ProviderContainer();

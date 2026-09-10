@@ -27,9 +27,11 @@ import 'app/router_provider.dart';
 import 'app/startup.dart';
 import 'app/theme.dart';
 import 'data/db/app_database.dart';
+import 'data/repository/drift_dose_repository.dart';
 import 'data/repository/drift_medicine_repository.dart';
 import 'data/repository/drift_onboarding_state_store.dart';
 import 'domain/port/clock.dart';
+import 'domain/port/dose_repository.dart';
 import 'domain/port/medicine_repository.dart';
 import 'domain/port/onboarding_state_store.dart';
 
@@ -44,6 +46,7 @@ Future<void> main() async {
   final MedicineRepository medicineRepository = DriftMedicineRepository(
     database,
   );
+  final DoseRepository doseRepository = DriftDoseRepository(database);
 
   // Closes the database when the OS tears the app down. The return value is
   // discarded on purpose: the listener registers itself with the
@@ -67,6 +70,7 @@ Future<void> main() async {
         completed: onboardingCompleted,
         medicineRepository: medicineRepository,
         clock: clock,
+        doseRepository: doseRepository,
       ),
     ),
   );
