@@ -34,6 +34,12 @@ Dose _dose({
   skippedAt: skippedAt,
   snoozedUntil: snoozedUntil,
   escalationWindowMinutes: escalationWindowMinutes,
+  // Story 1.7a's four AD-11 snapshot fields. resolve() never reads them, so
+  // fixed defaults keep every test below compiling unchanged.
+  medicineName: 'Metformin',
+  dosageAmount: 1,
+  dosageUnit: 'tablet',
+  form: 'tablet',
 );
 
 void main() {

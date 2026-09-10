@@ -797,8 +797,9 @@ void main() {
     });
   });
 
-  group('deleting a medicine takes its schedules with it (AD-12)', () {
-    test('both schedules go, and in ONE transaction', () async {
+  group('deleting a medicine takes its schedules (and, since Story 1.7a, its '
+      'doses) with it (AD-12)', () {
+    test('the schedules go, and in ONE transaction', () async {
       final Medicine medicine = await addMedicine();
       for (final String time in <String>['08:00', '20:00']) {
         await repository.addSchedule(
@@ -823,24 +824,30 @@ void main() {
 
       // The result alone proves nothing about atomicity -- the cascade would
       // produce it too -- so this reads the statements that actually reached
-      // SQLite. The two deletes must sit between one BEGIN and one COMMIT: a
-      // failure part-way then leaves NEITHER removed, never a Medicine without
-      // its Schedules (orphaned reminders) or Schedules without their Medicine.
+      // SQLite. All three deletes must sit between one BEGIN and one COMMIT: a
+      // failure part-way then leaves NONE of them removed, never a Medicine
+      // without its Schedules or Doses (orphaned reminders), and never a
+      // Schedule or Dose without its Medicine.
+      //
+      // `doses` first (Story 1.7a): with foreign keys on and no cascade,
+      // deleting a parent while a child still references it is rejected by
+      // the key, and a Dose's own `medicine_id` and `schedule_id` both
+      // reference rows this transaction is about to remove.
       expect(
         issued,
         equals(<String>[
           'begin',
+          'delete: DELETE FROM "doses" WHERE "medicine_id" = ?;',
           'delete: DELETE FROM "schedules" WHERE "medicine_id" = ?;',
           'delete: DELETE FROM "medicines" WHERE "id" = ?;',
           'commit',
         ]),
         reason:
-            'Exactly this, in exactly this order. Schedules first because '
-            'with foreign keys on and no cascade, deleting the medicine first '
-            'would be rejected by the key; both inside one transaction '
-            'because AD-12 promises they go together.',
+            'Exactly this, in exactly this order. Doses before Schedules '
+            'before the Medicine; all three inside one transaction because '
+            'AD-12 promises they go together.',
       );
-      expect(deletes, hasLength(2));
+      expect(deletes, hasLength(3));
     });
 
     test('another medicine\'s schedules are left alone', () async {

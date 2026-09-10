@@ -1588,12 +1588,1040 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
   }
 }
 
+class $DosesTable extends Doses with TableInfo<$DosesTable, DoseRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DosesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scheduleIdMeta = const VerificationMeta(
+    'scheduleId',
+  );
+  @override
+  late final GeneratedColumn<String> scheduleId = GeneratedColumn<String>(
+    'schedule_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES schedules (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _medicineIdMeta = const VerificationMeta(
+    'medicineId',
+  );
+  @override
+  late final GeneratedColumn<String> medicineId = GeneratedColumn<String>(
+    'medicine_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES medicines (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _scheduledLocalMeta = const VerificationMeta(
+    'scheduledLocal',
+  );
+  @override
+  late final GeneratedColumn<String> scheduledLocal = GeneratedColumn<String>(
+    'scheduled_local',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ianaTimezoneMeta = const VerificationMeta(
+    'ianaTimezone',
+  );
+  @override
+  late final GeneratedColumn<String> ianaTimezone = GeneratedColumn<String>(
+    'iana_timezone',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scheduledUtcMeta = const VerificationMeta(
+    'scheduledUtc',
+  );
+  @override
+  late final GeneratedColumn<String> scheduledUtc = GeneratedColumn<String>(
+    'scheduled_utc',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _takenAtMeta = const VerificationMeta(
+    'takenAt',
+  );
+  @override
+  late final GeneratedColumn<String> takenAt = GeneratedColumn<String>(
+    'taken_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _skippedAtMeta = const VerificationMeta(
+    'skippedAt',
+  );
+  @override
+  late final GeneratedColumn<String> skippedAt = GeneratedColumn<String>(
+    'skipped_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _snoozedUntilMeta = const VerificationMeta(
+    'snoozedUntil',
+  );
+  @override
+  late final GeneratedColumn<String> snoozedUntil = GeneratedColumn<String>(
+    'snoozed_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _snoozeCountMeta = const VerificationMeta(
+    'snoozeCount',
+  );
+  @override
+  late final GeneratedColumn<int> snoozeCount = GeneratedColumn<int>(
+    'snooze_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _medicineNameMeta = const VerificationMeta(
+    'medicineName',
+  );
+  @override
+  late final GeneratedColumn<String> medicineName = GeneratedColumn<String>(
+    'medicine_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dosageAmountMeta = const VerificationMeta(
+    'dosageAmount',
+  );
+  @override
+  late final GeneratedColumn<double> dosageAmount = GeneratedColumn<double>(
+    'dosage_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dosageUnitMeta = const VerificationMeta(
+    'dosageUnit',
+  );
+  @override
+  late final GeneratedColumn<String> dosageUnit = GeneratedColumn<String>(
+    'dosage_unit',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _formMeta = const VerificationMeta('form');
+  @override
+  late final GeneratedColumn<String> form = GeneratedColumn<String>(
+    'form',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _escalationWindowMinutesMeta =
+      const VerificationMeta('escalationWindowMinutes');
+  @override
+  late final GeneratedColumn<int> escalationWindowMinutes =
+      GeneratedColumn<int>(
+        'escalation_window_minutes',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _followUpOffsetsMinutesMeta =
+      const VerificationMeta('followUpOffsetsMinutes');
+  @override
+  late final GeneratedColumn<String> followUpOffsetsMinutes =
+      GeneratedColumn<String>(
+        'follow_up_offsets_minutes',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    scheduleId,
+    medicineId,
+    scheduledLocal,
+    ianaTimezone,
+    scheduledUtc,
+    takenAt,
+    skippedAt,
+    snoozedUntil,
+    snoozeCount,
+    medicineName,
+    dosageAmount,
+    dosageUnit,
+    form,
+    escalationWindowMinutes,
+    followUpOffsetsMinutes,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'doses';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DoseRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('schedule_id')) {
+      context.handle(
+        _scheduleIdMeta,
+        scheduleId.isAcceptableOrUnknown(data['schedule_id']!, _scheduleIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduleIdMeta);
+    }
+    if (data.containsKey('medicine_id')) {
+      context.handle(
+        _medicineIdMeta,
+        medicineId.isAcceptableOrUnknown(data['medicine_id']!, _medicineIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_medicineIdMeta);
+    }
+    if (data.containsKey('scheduled_local')) {
+      context.handle(
+        _scheduledLocalMeta,
+        scheduledLocal.isAcceptableOrUnknown(
+          data['scheduled_local']!,
+          _scheduledLocalMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduledLocalMeta);
+    }
+    if (data.containsKey('iana_timezone')) {
+      context.handle(
+        _ianaTimezoneMeta,
+        ianaTimezone.isAcceptableOrUnknown(
+          data['iana_timezone']!,
+          _ianaTimezoneMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_ianaTimezoneMeta);
+    }
+    if (data.containsKey('scheduled_utc')) {
+      context.handle(
+        _scheduledUtcMeta,
+        scheduledUtc.isAcceptableOrUnknown(
+          data['scheduled_utc']!,
+          _scheduledUtcMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduledUtcMeta);
+    }
+    if (data.containsKey('taken_at')) {
+      context.handle(
+        _takenAtMeta,
+        takenAt.isAcceptableOrUnknown(data['taken_at']!, _takenAtMeta),
+      );
+    }
+    if (data.containsKey('skipped_at')) {
+      context.handle(
+        _skippedAtMeta,
+        skippedAt.isAcceptableOrUnknown(data['skipped_at']!, _skippedAtMeta),
+      );
+    }
+    if (data.containsKey('snoozed_until')) {
+      context.handle(
+        _snoozedUntilMeta,
+        snoozedUntil.isAcceptableOrUnknown(
+          data['snoozed_until']!,
+          _snoozedUntilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('snooze_count')) {
+      context.handle(
+        _snoozeCountMeta,
+        snoozeCount.isAcceptableOrUnknown(
+          data['snooze_count']!,
+          _snoozeCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('medicine_name')) {
+      context.handle(
+        _medicineNameMeta,
+        medicineName.isAcceptableOrUnknown(
+          data['medicine_name']!,
+          _medicineNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_medicineNameMeta);
+    }
+    if (data.containsKey('dosage_amount')) {
+      context.handle(
+        _dosageAmountMeta,
+        dosageAmount.isAcceptableOrUnknown(
+          data['dosage_amount']!,
+          _dosageAmountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_dosageAmountMeta);
+    }
+    if (data.containsKey('dosage_unit')) {
+      context.handle(
+        _dosageUnitMeta,
+        dosageUnit.isAcceptableOrUnknown(data['dosage_unit']!, _dosageUnitMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dosageUnitMeta);
+    }
+    if (data.containsKey('form')) {
+      context.handle(
+        _formMeta,
+        form.isAcceptableOrUnknown(data['form']!, _formMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_formMeta);
+    }
+    if (data.containsKey('escalation_window_minutes')) {
+      context.handle(
+        _escalationWindowMinutesMeta,
+        escalationWindowMinutes.isAcceptableOrUnknown(
+          data['escalation_window_minutes']!,
+          _escalationWindowMinutesMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_escalationWindowMinutesMeta);
+    }
+    if (data.containsKey('follow_up_offsets_minutes')) {
+      context.handle(
+        _followUpOffsetsMinutesMeta,
+        followUpOffsetsMinutes.isAcceptableOrUnknown(
+          data['follow_up_offsets_minutes']!,
+          _followUpOffsetsMinutesMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_followUpOffsetsMinutesMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {scheduleId, scheduledLocal},
+  ];
+  @override
+  DoseRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DoseRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      scheduleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}schedule_id'],
+      )!,
+      medicineId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}medicine_id'],
+      )!,
+      scheduledLocal: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scheduled_local'],
+      )!,
+      ianaTimezone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}iana_timezone'],
+      )!,
+      scheduledUtc: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scheduled_utc'],
+      )!,
+      takenAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}taken_at'],
+      ),
+      skippedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}skipped_at'],
+      ),
+      snoozedUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}snoozed_until'],
+      ),
+      snoozeCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}snooze_count'],
+      )!,
+      medicineName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}medicine_name'],
+      )!,
+      dosageAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}dosage_amount'],
+      )!,
+      dosageUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dosage_unit'],
+      )!,
+      form: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}form'],
+      )!,
+      escalationWindowMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}escalation_window_minutes'],
+      )!,
+      followUpOffsetsMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}follow_up_offsets_minutes'],
+      )!,
+    );
+  }
+
+  @override
+  $DosesTable createAlias(String alias) {
+    return $DosesTable(attachedDatabase, alias);
+  }
+}
+
+class DoseRow extends DataClass implements Insertable<DoseRow> {
+  /// Deterministic per the spine's Identifiers convention --
+  /// `"{scheduleId}:{scheduledLocal ISO-8601}"` (AD-10). Minted by `Dose`
+  /// itself and written as given: unlike [Medicines]/[Schedules],
+  /// `DriftDoseRepository` mints no identity of its own.
+  final String id;
+
+  /// The [Schedules] row this Dose was generated from.
+  final String scheduleId;
+
+  /// The [Medicines] row this Dose belongs to, denormalised from the Schedule
+  /// rather than read through it -- AD-20's Escalation Window formula measures
+  /// the interval to the next dose of the *same Medicine across all its
+  /// Schedules*, a question a join on [scheduleId] alone cannot answer.
+  final String medicineId;
+
+  /// The wall-clock time this occurrence falls at, with no zone of its own
+  /// (AD-6) -- `Dose.scheduledLocal`, as ISO-8601 text with no offset.
+  final String scheduledLocal;
+
+  /// The IANA zone [scheduledLocal] is read in -- `Dose.ianaTimezone`.
+  final String ianaTimezone;
+
+  /// [scheduledLocal] resolved in [ianaTimezone], as a UTC instant --
+  /// `Dose.scheduledAt`, AD-6's one sanctioned UTC column, denormalised for
+  /// ordering and range queries only. Never the stored truth: [scheduledLocal]
+  /// plus [ianaTimezone] remains that, exactly as AD-6 requires.
+  final String scheduledUtc;
+
+  /// When the user recorded taking this Dose, or null. Written only by
+  /// `DoseRecorder` (AD-4), which does not exist before Epic 2 -- the column
+  /// exists now because a complete row needs somewhere to hold the fact once
+  /// `DoseRecorder` does.
+  final String? takenAt;
+
+  /// When the user recorded skipping this Dose, or null. See [takenAt].
+  final String? skippedAt;
+
+  /// The instant a live snooze runs out, or null. See [takenAt].
+  final String? snoozedUntil;
+
+  /// How many times this Dose has been snoozed. Defaults to 0, matching
+  /// `Dose.snoozeCount`'s own default.
+  final int snoozeCount;
+
+  /// The Medicine's name, frozen at generation (AD-11) so History reads this
+  /// row instead of a live join a later rename could change underneath it.
+  final String medicineName;
+
+  /// The dose amount, frozen at generation (AD-11). See [medicineName].
+  final double dosageAmount;
+
+  /// The dose unit, frozen at generation (AD-11). See [medicineName].
+  final String dosageUnit;
+
+  /// Tablet, capsule, drops -- frozen at generation (AD-11). See
+  /// [medicineName]. The spine's ERD mermaid block omits this column from
+  /// `DOSE`; that is a diagram error the spec names explicitly, not a second
+  /// source of truth -- AD-11's prose lists all four frozen fields.
+  final String form;
+
+  /// The Escalation Window's length in minutes, resolved and frozen at
+  /// generation (AD-16) -- `resolve()` reads this, never a live
+  /// `ReminderSettings` value.
+  final int escalationWindowMinutes;
+
+  /// The follow-up offsets in minutes, frozen at generation (AD-16), as
+  /// comma-separated text in chain order. Order-preserving rather than sorted
+  /// like [Schedules.daysOfWeek]: these are offsets along one escalation
+  /// chain, not a set.
+  final String followUpOffsetsMinutes;
+  const DoseRow({
+    required this.id,
+    required this.scheduleId,
+    required this.medicineId,
+    required this.scheduledLocal,
+    required this.ianaTimezone,
+    required this.scheduledUtc,
+    this.takenAt,
+    this.skippedAt,
+    this.snoozedUntil,
+    required this.snoozeCount,
+    required this.medicineName,
+    required this.dosageAmount,
+    required this.dosageUnit,
+    required this.form,
+    required this.escalationWindowMinutes,
+    required this.followUpOffsetsMinutes,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['schedule_id'] = Variable<String>(scheduleId);
+    map['medicine_id'] = Variable<String>(medicineId);
+    map['scheduled_local'] = Variable<String>(scheduledLocal);
+    map['iana_timezone'] = Variable<String>(ianaTimezone);
+    map['scheduled_utc'] = Variable<String>(scheduledUtc);
+    if (!nullToAbsent || takenAt != null) {
+      map['taken_at'] = Variable<String>(takenAt);
+    }
+    if (!nullToAbsent || skippedAt != null) {
+      map['skipped_at'] = Variable<String>(skippedAt);
+    }
+    if (!nullToAbsent || snoozedUntil != null) {
+      map['snoozed_until'] = Variable<String>(snoozedUntil);
+    }
+    map['snooze_count'] = Variable<int>(snoozeCount);
+    map['medicine_name'] = Variable<String>(medicineName);
+    map['dosage_amount'] = Variable<double>(dosageAmount);
+    map['dosage_unit'] = Variable<String>(dosageUnit);
+    map['form'] = Variable<String>(form);
+    map['escalation_window_minutes'] = Variable<int>(escalationWindowMinutes);
+    map['follow_up_offsets_minutes'] = Variable<String>(followUpOffsetsMinutes);
+    return map;
+  }
+
+  DosesCompanion toCompanion(bool nullToAbsent) {
+    return DosesCompanion(
+      id: Value(id),
+      scheduleId: Value(scheduleId),
+      medicineId: Value(medicineId),
+      scheduledLocal: Value(scheduledLocal),
+      ianaTimezone: Value(ianaTimezone),
+      scheduledUtc: Value(scheduledUtc),
+      takenAt: takenAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(takenAt),
+      skippedAt: skippedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(skippedAt),
+      snoozedUntil: snoozedUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(snoozedUntil),
+      snoozeCount: Value(snoozeCount),
+      medicineName: Value(medicineName),
+      dosageAmount: Value(dosageAmount),
+      dosageUnit: Value(dosageUnit),
+      form: Value(form),
+      escalationWindowMinutes: Value(escalationWindowMinutes),
+      followUpOffsetsMinutes: Value(followUpOffsetsMinutes),
+    );
+  }
+
+  factory DoseRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DoseRow(
+      id: serializer.fromJson<String>(json['id']),
+      scheduleId: serializer.fromJson<String>(json['scheduleId']),
+      medicineId: serializer.fromJson<String>(json['medicineId']),
+      scheduledLocal: serializer.fromJson<String>(json['scheduledLocal']),
+      ianaTimezone: serializer.fromJson<String>(json['ianaTimezone']),
+      scheduledUtc: serializer.fromJson<String>(json['scheduledUtc']),
+      takenAt: serializer.fromJson<String?>(json['takenAt']),
+      skippedAt: serializer.fromJson<String?>(json['skippedAt']),
+      snoozedUntil: serializer.fromJson<String?>(json['snoozedUntil']),
+      snoozeCount: serializer.fromJson<int>(json['snoozeCount']),
+      medicineName: serializer.fromJson<String>(json['medicineName']),
+      dosageAmount: serializer.fromJson<double>(json['dosageAmount']),
+      dosageUnit: serializer.fromJson<String>(json['dosageUnit']),
+      form: serializer.fromJson<String>(json['form']),
+      escalationWindowMinutes: serializer.fromJson<int>(
+        json['escalationWindowMinutes'],
+      ),
+      followUpOffsetsMinutes: serializer.fromJson<String>(
+        json['followUpOffsetsMinutes'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'scheduleId': serializer.toJson<String>(scheduleId),
+      'medicineId': serializer.toJson<String>(medicineId),
+      'scheduledLocal': serializer.toJson<String>(scheduledLocal),
+      'ianaTimezone': serializer.toJson<String>(ianaTimezone),
+      'scheduledUtc': serializer.toJson<String>(scheduledUtc),
+      'takenAt': serializer.toJson<String?>(takenAt),
+      'skippedAt': serializer.toJson<String?>(skippedAt),
+      'snoozedUntil': serializer.toJson<String?>(snoozedUntil),
+      'snoozeCount': serializer.toJson<int>(snoozeCount),
+      'medicineName': serializer.toJson<String>(medicineName),
+      'dosageAmount': serializer.toJson<double>(dosageAmount),
+      'dosageUnit': serializer.toJson<String>(dosageUnit),
+      'form': serializer.toJson<String>(form),
+      'escalationWindowMinutes': serializer.toJson<int>(
+        escalationWindowMinutes,
+      ),
+      'followUpOffsetsMinutes': serializer.toJson<String>(
+        followUpOffsetsMinutes,
+      ),
+    };
+  }
+
+  DoseRow copyWith({
+    String? id,
+    String? scheduleId,
+    String? medicineId,
+    String? scheduledLocal,
+    String? ianaTimezone,
+    String? scheduledUtc,
+    Value<String?> takenAt = const Value.absent(),
+    Value<String?> skippedAt = const Value.absent(),
+    Value<String?> snoozedUntil = const Value.absent(),
+    int? snoozeCount,
+    String? medicineName,
+    double? dosageAmount,
+    String? dosageUnit,
+    String? form,
+    int? escalationWindowMinutes,
+    String? followUpOffsetsMinutes,
+  }) => DoseRow(
+    id: id ?? this.id,
+    scheduleId: scheduleId ?? this.scheduleId,
+    medicineId: medicineId ?? this.medicineId,
+    scheduledLocal: scheduledLocal ?? this.scheduledLocal,
+    ianaTimezone: ianaTimezone ?? this.ianaTimezone,
+    scheduledUtc: scheduledUtc ?? this.scheduledUtc,
+    takenAt: takenAt.present ? takenAt.value : this.takenAt,
+    skippedAt: skippedAt.present ? skippedAt.value : this.skippedAt,
+    snoozedUntil: snoozedUntil.present ? snoozedUntil.value : this.snoozedUntil,
+    snoozeCount: snoozeCount ?? this.snoozeCount,
+    medicineName: medicineName ?? this.medicineName,
+    dosageAmount: dosageAmount ?? this.dosageAmount,
+    dosageUnit: dosageUnit ?? this.dosageUnit,
+    form: form ?? this.form,
+    escalationWindowMinutes:
+        escalationWindowMinutes ?? this.escalationWindowMinutes,
+    followUpOffsetsMinutes:
+        followUpOffsetsMinutes ?? this.followUpOffsetsMinutes,
+  );
+  DoseRow copyWithCompanion(DosesCompanion data) {
+    return DoseRow(
+      id: data.id.present ? data.id.value : this.id,
+      scheduleId: data.scheduleId.present
+          ? data.scheduleId.value
+          : this.scheduleId,
+      medicineId: data.medicineId.present
+          ? data.medicineId.value
+          : this.medicineId,
+      scheduledLocal: data.scheduledLocal.present
+          ? data.scheduledLocal.value
+          : this.scheduledLocal,
+      ianaTimezone: data.ianaTimezone.present
+          ? data.ianaTimezone.value
+          : this.ianaTimezone,
+      scheduledUtc: data.scheduledUtc.present
+          ? data.scheduledUtc.value
+          : this.scheduledUtc,
+      takenAt: data.takenAt.present ? data.takenAt.value : this.takenAt,
+      skippedAt: data.skippedAt.present ? data.skippedAt.value : this.skippedAt,
+      snoozedUntil: data.snoozedUntil.present
+          ? data.snoozedUntil.value
+          : this.snoozedUntil,
+      snoozeCount: data.snoozeCount.present
+          ? data.snoozeCount.value
+          : this.snoozeCount,
+      medicineName: data.medicineName.present
+          ? data.medicineName.value
+          : this.medicineName,
+      dosageAmount: data.dosageAmount.present
+          ? data.dosageAmount.value
+          : this.dosageAmount,
+      dosageUnit: data.dosageUnit.present
+          ? data.dosageUnit.value
+          : this.dosageUnit,
+      form: data.form.present ? data.form.value : this.form,
+      escalationWindowMinutes: data.escalationWindowMinutes.present
+          ? data.escalationWindowMinutes.value
+          : this.escalationWindowMinutes,
+      followUpOffsetsMinutes: data.followUpOffsetsMinutes.present
+          ? data.followUpOffsetsMinutes.value
+          : this.followUpOffsetsMinutes,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DoseRow(')
+          ..write('id: $id, ')
+          ..write('scheduleId: $scheduleId, ')
+          ..write('medicineId: $medicineId, ')
+          ..write('scheduledLocal: $scheduledLocal, ')
+          ..write('ianaTimezone: $ianaTimezone, ')
+          ..write('scheduledUtc: $scheduledUtc, ')
+          ..write('takenAt: $takenAt, ')
+          ..write('skippedAt: $skippedAt, ')
+          ..write('snoozedUntil: $snoozedUntil, ')
+          ..write('snoozeCount: $snoozeCount, ')
+          ..write('medicineName: $medicineName, ')
+          ..write('dosageAmount: $dosageAmount, ')
+          ..write('dosageUnit: $dosageUnit, ')
+          ..write('form: $form, ')
+          ..write('escalationWindowMinutes: $escalationWindowMinutes, ')
+          ..write('followUpOffsetsMinutes: $followUpOffsetsMinutes')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    scheduleId,
+    medicineId,
+    scheduledLocal,
+    ianaTimezone,
+    scheduledUtc,
+    takenAt,
+    skippedAt,
+    snoozedUntil,
+    snoozeCount,
+    medicineName,
+    dosageAmount,
+    dosageUnit,
+    form,
+    escalationWindowMinutes,
+    followUpOffsetsMinutes,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DoseRow &&
+          other.id == this.id &&
+          other.scheduleId == this.scheduleId &&
+          other.medicineId == this.medicineId &&
+          other.scheduledLocal == this.scheduledLocal &&
+          other.ianaTimezone == this.ianaTimezone &&
+          other.scheduledUtc == this.scheduledUtc &&
+          other.takenAt == this.takenAt &&
+          other.skippedAt == this.skippedAt &&
+          other.snoozedUntil == this.snoozedUntil &&
+          other.snoozeCount == this.snoozeCount &&
+          other.medicineName == this.medicineName &&
+          other.dosageAmount == this.dosageAmount &&
+          other.dosageUnit == this.dosageUnit &&
+          other.form == this.form &&
+          other.escalationWindowMinutes == this.escalationWindowMinutes &&
+          other.followUpOffsetsMinutes == this.followUpOffsetsMinutes);
+}
+
+class DosesCompanion extends UpdateCompanion<DoseRow> {
+  final Value<String> id;
+  final Value<String> scheduleId;
+  final Value<String> medicineId;
+  final Value<String> scheduledLocal;
+  final Value<String> ianaTimezone;
+  final Value<String> scheduledUtc;
+  final Value<String?> takenAt;
+  final Value<String?> skippedAt;
+  final Value<String?> snoozedUntil;
+  final Value<int> snoozeCount;
+  final Value<String> medicineName;
+  final Value<double> dosageAmount;
+  final Value<String> dosageUnit;
+  final Value<String> form;
+  final Value<int> escalationWindowMinutes;
+  final Value<String> followUpOffsetsMinutes;
+  final Value<int> rowid;
+  const DosesCompanion({
+    this.id = const Value.absent(),
+    this.scheduleId = const Value.absent(),
+    this.medicineId = const Value.absent(),
+    this.scheduledLocal = const Value.absent(),
+    this.ianaTimezone = const Value.absent(),
+    this.scheduledUtc = const Value.absent(),
+    this.takenAt = const Value.absent(),
+    this.skippedAt = const Value.absent(),
+    this.snoozedUntil = const Value.absent(),
+    this.snoozeCount = const Value.absent(),
+    this.medicineName = const Value.absent(),
+    this.dosageAmount = const Value.absent(),
+    this.dosageUnit = const Value.absent(),
+    this.form = const Value.absent(),
+    this.escalationWindowMinutes = const Value.absent(),
+    this.followUpOffsetsMinutes = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DosesCompanion.insert({
+    required String id,
+    required String scheduleId,
+    required String medicineId,
+    required String scheduledLocal,
+    required String ianaTimezone,
+    required String scheduledUtc,
+    this.takenAt = const Value.absent(),
+    this.skippedAt = const Value.absent(),
+    this.snoozedUntil = const Value.absent(),
+    this.snoozeCount = const Value.absent(),
+    required String medicineName,
+    required double dosageAmount,
+    required String dosageUnit,
+    required String form,
+    required int escalationWindowMinutes,
+    required String followUpOffsetsMinutes,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       scheduleId = Value(scheduleId),
+       medicineId = Value(medicineId),
+       scheduledLocal = Value(scheduledLocal),
+       ianaTimezone = Value(ianaTimezone),
+       scheduledUtc = Value(scheduledUtc),
+       medicineName = Value(medicineName),
+       dosageAmount = Value(dosageAmount),
+       dosageUnit = Value(dosageUnit),
+       form = Value(form),
+       escalationWindowMinutes = Value(escalationWindowMinutes),
+       followUpOffsetsMinutes = Value(followUpOffsetsMinutes);
+  static Insertable<DoseRow> custom({
+    Expression<String>? id,
+    Expression<String>? scheduleId,
+    Expression<String>? medicineId,
+    Expression<String>? scheduledLocal,
+    Expression<String>? ianaTimezone,
+    Expression<String>? scheduledUtc,
+    Expression<String>? takenAt,
+    Expression<String>? skippedAt,
+    Expression<String>? snoozedUntil,
+    Expression<int>? snoozeCount,
+    Expression<String>? medicineName,
+    Expression<double>? dosageAmount,
+    Expression<String>? dosageUnit,
+    Expression<String>? form,
+    Expression<int>? escalationWindowMinutes,
+    Expression<String>? followUpOffsetsMinutes,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (scheduleId != null) 'schedule_id': scheduleId,
+      if (medicineId != null) 'medicine_id': medicineId,
+      if (scheduledLocal != null) 'scheduled_local': scheduledLocal,
+      if (ianaTimezone != null) 'iana_timezone': ianaTimezone,
+      if (scheduledUtc != null) 'scheduled_utc': scheduledUtc,
+      if (takenAt != null) 'taken_at': takenAt,
+      if (skippedAt != null) 'skipped_at': skippedAt,
+      if (snoozedUntil != null) 'snoozed_until': snoozedUntil,
+      if (snoozeCount != null) 'snooze_count': snoozeCount,
+      if (medicineName != null) 'medicine_name': medicineName,
+      if (dosageAmount != null) 'dosage_amount': dosageAmount,
+      if (dosageUnit != null) 'dosage_unit': dosageUnit,
+      if (form != null) 'form': form,
+      if (escalationWindowMinutes != null)
+        'escalation_window_minutes': escalationWindowMinutes,
+      if (followUpOffsetsMinutes != null)
+        'follow_up_offsets_minutes': followUpOffsetsMinutes,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DosesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? scheduleId,
+    Value<String>? medicineId,
+    Value<String>? scheduledLocal,
+    Value<String>? ianaTimezone,
+    Value<String>? scheduledUtc,
+    Value<String?>? takenAt,
+    Value<String?>? skippedAt,
+    Value<String?>? snoozedUntil,
+    Value<int>? snoozeCount,
+    Value<String>? medicineName,
+    Value<double>? dosageAmount,
+    Value<String>? dosageUnit,
+    Value<String>? form,
+    Value<int>? escalationWindowMinutes,
+    Value<String>? followUpOffsetsMinutes,
+    Value<int>? rowid,
+  }) {
+    return DosesCompanion(
+      id: id ?? this.id,
+      scheduleId: scheduleId ?? this.scheduleId,
+      medicineId: medicineId ?? this.medicineId,
+      scheduledLocal: scheduledLocal ?? this.scheduledLocal,
+      ianaTimezone: ianaTimezone ?? this.ianaTimezone,
+      scheduledUtc: scheduledUtc ?? this.scheduledUtc,
+      takenAt: takenAt ?? this.takenAt,
+      skippedAt: skippedAt ?? this.skippedAt,
+      snoozedUntil: snoozedUntil ?? this.snoozedUntil,
+      snoozeCount: snoozeCount ?? this.snoozeCount,
+      medicineName: medicineName ?? this.medicineName,
+      dosageAmount: dosageAmount ?? this.dosageAmount,
+      dosageUnit: dosageUnit ?? this.dosageUnit,
+      form: form ?? this.form,
+      escalationWindowMinutes:
+          escalationWindowMinutes ?? this.escalationWindowMinutes,
+      followUpOffsetsMinutes:
+          followUpOffsetsMinutes ?? this.followUpOffsetsMinutes,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (scheduleId.present) {
+      map['schedule_id'] = Variable<String>(scheduleId.value);
+    }
+    if (medicineId.present) {
+      map['medicine_id'] = Variable<String>(medicineId.value);
+    }
+    if (scheduledLocal.present) {
+      map['scheduled_local'] = Variable<String>(scheduledLocal.value);
+    }
+    if (ianaTimezone.present) {
+      map['iana_timezone'] = Variable<String>(ianaTimezone.value);
+    }
+    if (scheduledUtc.present) {
+      map['scheduled_utc'] = Variable<String>(scheduledUtc.value);
+    }
+    if (takenAt.present) {
+      map['taken_at'] = Variable<String>(takenAt.value);
+    }
+    if (skippedAt.present) {
+      map['skipped_at'] = Variable<String>(skippedAt.value);
+    }
+    if (snoozedUntil.present) {
+      map['snoozed_until'] = Variable<String>(snoozedUntil.value);
+    }
+    if (snoozeCount.present) {
+      map['snooze_count'] = Variable<int>(snoozeCount.value);
+    }
+    if (medicineName.present) {
+      map['medicine_name'] = Variable<String>(medicineName.value);
+    }
+    if (dosageAmount.present) {
+      map['dosage_amount'] = Variable<double>(dosageAmount.value);
+    }
+    if (dosageUnit.present) {
+      map['dosage_unit'] = Variable<String>(dosageUnit.value);
+    }
+    if (form.present) {
+      map['form'] = Variable<String>(form.value);
+    }
+    if (escalationWindowMinutes.present) {
+      map['escalation_window_minutes'] = Variable<int>(
+        escalationWindowMinutes.value,
+      );
+    }
+    if (followUpOffsetsMinutes.present) {
+      map['follow_up_offsets_minutes'] = Variable<String>(
+        followUpOffsetsMinutes.value,
+      );
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DosesCompanion(')
+          ..write('id: $id, ')
+          ..write('scheduleId: $scheduleId, ')
+          ..write('medicineId: $medicineId, ')
+          ..write('scheduledLocal: $scheduledLocal, ')
+          ..write('ianaTimezone: $ianaTimezone, ')
+          ..write('scheduledUtc: $scheduledUtc, ')
+          ..write('takenAt: $takenAt, ')
+          ..write('skippedAt: $skippedAt, ')
+          ..write('snoozedUntil: $snoozedUntil, ')
+          ..write('snoozeCount: $snoozeCount, ')
+          ..write('medicineName: $medicineName, ')
+          ..write('dosageAmount: $dosageAmount, ')
+          ..write('dosageUnit: $dosageUnit, ')
+          ..write('form: $form, ')
+          ..write('escalationWindowMinutes: $escalationWindowMinutes, ')
+          ..write('followUpOffsetsMinutes: $followUpOffsetsMinutes, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $MedicinesTable medicines = $MedicinesTable(this);
   late final $SchedulesTable schedules = $SchedulesTable(this);
+  late final $DosesTable doses = $DosesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1602,6 +2630,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     appSettings,
     medicines,
     schedules,
+    doses,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1611,6 +2640,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('schedules', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'schedules',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('doses', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'medicines',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('doses', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -1815,6 +2858,25 @@ final class $$MedicinesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$DosesTable, List<DoseRow>> _dosesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.doses,
+    aliasName: 'medicines__id__doses__medicine_id',
+  );
+
+  $$DosesTableProcessedTableManager get dosesRefs {
+    final manager = $$DosesTableTableManager(
+      $_db,
+      $_db.doses,
+    ).filter((f) => f.medicineId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dosesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$MedicinesTableFilterComposer
@@ -1897,6 +2959,31 @@ class $$MedicinesTableFilterComposer
           }) => $$SchedulesTableFilterComposer(
             $db: $db,
             $table: $db.schedules,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dosesRefs(
+    Expression<bool> Function($$DosesTableFilterComposer f) f,
+  ) {
+    final $$DosesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.doses,
+      getReferencedColumn: (t) => t.medicineId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DosesTableFilterComposer(
+            $db: $db,
+            $table: $db.doses,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -2046,6 +3133,31 @@ class $$MedicinesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> dosesRefs<T extends Object>(
+    Expression<T> Function($$DosesTableAnnotationComposer a) f,
+  ) {
+    final $$DosesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.doses,
+      getReferencedColumn: (t) => t.medicineId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DosesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.doses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$MedicinesTableTableManager
@@ -2061,7 +3173,7 @@ class $$MedicinesTableTableManager
           $$MedicinesTableUpdateCompanionBuilder,
           (MedicineRow, $$MedicinesTableReferences),
           MedicineRow,
-          PrefetchHooks Function({bool schedulesRefs})
+          PrefetchHooks Function({bool schedulesRefs, bool dosesRefs})
         > {
   $$MedicinesTableTableManager(_$AppDatabase db, $MedicinesTable table)
     : super(
@@ -2138,10 +3250,13 @@ class $$MedicinesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({schedulesRefs = false}) {
+          prefetchHooksCallback: ({schedulesRefs = false, dosesRefs = false}) {
             return PrefetchHooks(
               db: db,
-              explicitlyWatchedTables: [if (schedulesRefs) db.schedules],
+              explicitlyWatchedTables: [
+                if (schedulesRefs) db.schedules,
+                if (dosesRefs) db.doses,
+              ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
                 return [
@@ -2160,6 +3275,21 @@ class $$MedicinesTableTableManager
                             table,
                             p0,
                           ).schedulesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.medicineId == item.id),
+                      typedResults: items,
+                    ),
+                  if (dosesRefs)
+                    await $_getPrefetchedData<
+                      MedicineRow,
+                      $MedicinesTable,
+                      DoseRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$MedicinesTableReferences
+                          ._dosesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$MedicinesTableReferences(db, table, p0).dosesRefs,
                       referencedItemsForCurrentItem: (item, referencedItems) =>
                           referencedItems.where((e) => e.medicineId == item.id),
                       typedResults: items,
@@ -2184,7 +3314,7 @@ typedef $$MedicinesTableProcessedTableManager =
       $$MedicinesTableUpdateCompanionBuilder,
       (MedicineRow, $$MedicinesTableReferences),
       MedicineRow,
-      PrefetchHooks Function({bool schedulesRefs})
+      PrefetchHooks Function({bool schedulesRefs, bool dosesRefs})
     >;
 typedef $$SchedulesTableCreateCompanionBuilder =
     SchedulesCompanion Function({
@@ -2231,6 +3361,25 @@ final class $$SchedulesTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$DosesTable, List<DoseRow>> _dosesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.doses,
+    aliasName: 'schedules__id__doses__schedule_id',
+  );
+
+  $$DosesTableProcessedTableManager get dosesRefs {
+    final manager = $$DosesTableTableManager(
+      $_db,
+      $_db.doses,
+    ).filter((f) => f.scheduleId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dosesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 }
@@ -2305,6 +3454,31 @@ class $$SchedulesTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> dosesRefs(
+    Expression<bool> Function($$DosesTableFilterComposer f) f,
+  ) {
+    final $$DosesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.doses,
+      getReferencedColumn: (t) => t.scheduleId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DosesTableFilterComposer(
+            $db: $db,
+            $table: $db.doses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 }
 
@@ -2446,6 +3620,31 @@ class $$SchedulesTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> dosesRefs<T extends Object>(
+    Expression<T> Function($$DosesTableAnnotationComposer a) f,
+  ) {
+    final $$DosesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.doses,
+      getReferencedColumn: (t) => t.scheduleId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DosesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.doses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$SchedulesTableTableManager
@@ -2461,7 +3660,7 @@ class $$SchedulesTableTableManager
           $$SchedulesTableUpdateCompanionBuilder,
           (ScheduleRow, $$SchedulesTableReferences),
           ScheduleRow,
-          PrefetchHooks Function({bool medicineId})
+          PrefetchHooks Function({bool medicineId, bool dosesRefs})
         > {
   $$SchedulesTableTableManager(_$AppDatabase db, $SchedulesTable table)
     : super(
@@ -2530,10 +3729,10 @@ class $$SchedulesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({medicineId = false}) {
+          prefetchHooksCallback: ({medicineId = false, dosesRefs = false}) {
             return PrefetchHooks(
               db: db,
-              explicitlyWatchedTables: [],
+              explicitlyWatchedTables: [if (dosesRefs) db.doses],
               addJoins:
                   <
                     T extends TableManagerState<
@@ -2567,7 +3766,23 @@ class $$SchedulesTableTableManager
                     return state;
                   },
               getPrefetchedDataCallback: (items) async {
-                return [];
+                return [
+                  if (dosesRefs)
+                    await $_getPrefetchedData<
+                      ScheduleRow,
+                      $SchedulesTable,
+                      DoseRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$SchedulesTableReferences
+                          ._dosesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$SchedulesTableReferences(db, table, p0).dosesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.scheduleId == item.id),
+                      typedResults: items,
+                    ),
+                ];
               },
             );
           },
@@ -2587,7 +3802,638 @@ typedef $$SchedulesTableProcessedTableManager =
       $$SchedulesTableUpdateCompanionBuilder,
       (ScheduleRow, $$SchedulesTableReferences),
       ScheduleRow,
-      PrefetchHooks Function({bool medicineId})
+      PrefetchHooks Function({bool medicineId, bool dosesRefs})
+    >;
+typedef $$DosesTableCreateCompanionBuilder =
+    DosesCompanion Function({
+      required String id,
+      required String scheduleId,
+      required String medicineId,
+      required String scheduledLocal,
+      required String ianaTimezone,
+      required String scheduledUtc,
+      Value<String?> takenAt,
+      Value<String?> skippedAt,
+      Value<String?> snoozedUntil,
+      Value<int> snoozeCount,
+      required String medicineName,
+      required double dosageAmount,
+      required String dosageUnit,
+      required String form,
+      required int escalationWindowMinutes,
+      required String followUpOffsetsMinutes,
+      Value<int> rowid,
+    });
+typedef $$DosesTableUpdateCompanionBuilder =
+    DosesCompanion Function({
+      Value<String> id,
+      Value<String> scheduleId,
+      Value<String> medicineId,
+      Value<String> scheduledLocal,
+      Value<String> ianaTimezone,
+      Value<String> scheduledUtc,
+      Value<String?> takenAt,
+      Value<String?> skippedAt,
+      Value<String?> snoozedUntil,
+      Value<int> snoozeCount,
+      Value<String> medicineName,
+      Value<double> dosageAmount,
+      Value<String> dosageUnit,
+      Value<String> form,
+      Value<int> escalationWindowMinutes,
+      Value<String> followUpOffsetsMinutes,
+      Value<int> rowid,
+    });
+
+final class $$DosesTableReferences
+    extends BaseReferences<_$AppDatabase, $DosesTable, DoseRow> {
+  $$DosesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $SchedulesTable _scheduleIdTable(_$AppDatabase db) =>
+      db.schedules.createAlias('doses__schedule_id__schedules__id');
+
+  $$SchedulesTableProcessedTableManager get scheduleId {
+    final $_column = $_itemColumn<String>('schedule_id')!;
+
+    final manager = $$SchedulesTableTableManager(
+      $_db,
+      $_db.schedules,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_scheduleIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $MedicinesTable _medicineIdTable(_$AppDatabase db) =>
+      db.medicines.createAlias('doses__medicine_id__medicines__id');
+
+  $$MedicinesTableProcessedTableManager get medicineId {
+    final $_column = $_itemColumn<String>('medicine_id')!;
+
+    final manager = $$MedicinesTableTableManager(
+      $_db,
+      $_db.medicines,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_medicineIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DosesTableFilterComposer extends Composer<_$AppDatabase, $DosesTable> {
+  $$DosesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scheduledLocal => $composableBuilder(
+    column: $table.scheduledLocal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ianaTimezone => $composableBuilder(
+    column: $table.ianaTimezone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scheduledUtc => $composableBuilder(
+    column: $table.scheduledUtc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get takenAt => $composableBuilder(
+    column: $table.takenAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get skippedAt => $composableBuilder(
+    column: $table.skippedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get snoozedUntil => $composableBuilder(
+    column: $table.snoozedUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get snoozeCount => $composableBuilder(
+    column: $table.snoozeCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get medicineName => $composableBuilder(
+    column: $table.medicineName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get dosageAmount => $composableBuilder(
+    column: $table.dosageAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dosageUnit => $composableBuilder(
+    column: $table.dosageUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get form => $composableBuilder(
+    column: $table.form,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get escalationWindowMinutes => $composableBuilder(
+    column: $table.escalationWindowMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get followUpOffsetsMinutes => $composableBuilder(
+    column: $table.followUpOffsetsMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$SchedulesTableFilterComposer get scheduleId {
+    final $$SchedulesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.scheduleId,
+      referencedTable: $db.schedules,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchedulesTableFilterComposer(
+            $db: $db,
+            $table: $db.schedules,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$MedicinesTableFilterComposer get medicineId {
+    final $$MedicinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.medicineId,
+      referencedTable: $db.medicines,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MedicinesTableFilterComposer(
+            $db: $db,
+            $table: $db.medicines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DosesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DosesTable> {
+  $$DosesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scheduledLocal => $composableBuilder(
+    column: $table.scheduledLocal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ianaTimezone => $composableBuilder(
+    column: $table.ianaTimezone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scheduledUtc => $composableBuilder(
+    column: $table.scheduledUtc,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get takenAt => $composableBuilder(
+    column: $table.takenAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get skippedAt => $composableBuilder(
+    column: $table.skippedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get snoozedUntil => $composableBuilder(
+    column: $table.snoozedUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get snoozeCount => $composableBuilder(
+    column: $table.snoozeCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get medicineName => $composableBuilder(
+    column: $table.medicineName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get dosageAmount => $composableBuilder(
+    column: $table.dosageAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dosageUnit => $composableBuilder(
+    column: $table.dosageUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get form => $composableBuilder(
+    column: $table.form,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get escalationWindowMinutes => $composableBuilder(
+    column: $table.escalationWindowMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get followUpOffsetsMinutes => $composableBuilder(
+    column: $table.followUpOffsetsMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$SchedulesTableOrderingComposer get scheduleId {
+    final $$SchedulesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.scheduleId,
+      referencedTable: $db.schedules,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchedulesTableOrderingComposer(
+            $db: $db,
+            $table: $db.schedules,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$MedicinesTableOrderingComposer get medicineId {
+    final $$MedicinesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.medicineId,
+      referencedTable: $db.medicines,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MedicinesTableOrderingComposer(
+            $db: $db,
+            $table: $db.medicines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DosesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DosesTable> {
+  $$DosesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get scheduledLocal => $composableBuilder(
+    column: $table.scheduledLocal,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get ianaTimezone => $composableBuilder(
+    column: $table.ianaTimezone,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get scheduledUtc => $composableBuilder(
+    column: $table.scheduledUtc,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get takenAt =>
+      $composableBuilder(column: $table.takenAt, builder: (column) => column);
+
+  GeneratedColumn<String> get skippedAt =>
+      $composableBuilder(column: $table.skippedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get snoozedUntil => $composableBuilder(
+    column: $table.snoozedUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get snoozeCount => $composableBuilder(
+    column: $table.snoozeCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get medicineName => $composableBuilder(
+    column: $table.medicineName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get dosageAmount => $composableBuilder(
+    column: $table.dosageAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dosageUnit => $composableBuilder(
+    column: $table.dosageUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get form =>
+      $composableBuilder(column: $table.form, builder: (column) => column);
+
+  GeneratedColumn<int> get escalationWindowMinutes => $composableBuilder(
+    column: $table.escalationWindowMinutes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get followUpOffsetsMinutes => $composableBuilder(
+    column: $table.followUpOffsetsMinutes,
+    builder: (column) => column,
+  );
+
+  $$SchedulesTableAnnotationComposer get scheduleId {
+    final $$SchedulesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.scheduleId,
+      referencedTable: $db.schedules,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SchedulesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.schedules,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$MedicinesTableAnnotationComposer get medicineId {
+    final $$MedicinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.medicineId,
+      referencedTable: $db.medicines,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MedicinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.medicines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DosesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DosesTable,
+          DoseRow,
+          $$DosesTableFilterComposer,
+          $$DosesTableOrderingComposer,
+          $$DosesTableAnnotationComposer,
+          $$DosesTableCreateCompanionBuilder,
+          $$DosesTableUpdateCompanionBuilder,
+          (DoseRow, $$DosesTableReferences),
+          DoseRow,
+          PrefetchHooks Function({bool scheduleId, bool medicineId})
+        > {
+  $$DosesTableTableManager(_$AppDatabase db, $DosesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DosesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DosesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DosesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> scheduleId = const Value.absent(),
+                Value<String> medicineId = const Value.absent(),
+                Value<String> scheduledLocal = const Value.absent(),
+                Value<String> ianaTimezone = const Value.absent(),
+                Value<String> scheduledUtc = const Value.absent(),
+                Value<String?> takenAt = const Value.absent(),
+                Value<String?> skippedAt = const Value.absent(),
+                Value<String?> snoozedUntil = const Value.absent(),
+                Value<int> snoozeCount = const Value.absent(),
+                Value<String> medicineName = const Value.absent(),
+                Value<double> dosageAmount = const Value.absent(),
+                Value<String> dosageUnit = const Value.absent(),
+                Value<String> form = const Value.absent(),
+                Value<int> escalationWindowMinutes = const Value.absent(),
+                Value<String> followUpOffsetsMinutes = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DosesCompanion(
+                id: id,
+                scheduleId: scheduleId,
+                medicineId: medicineId,
+                scheduledLocal: scheduledLocal,
+                ianaTimezone: ianaTimezone,
+                scheduledUtc: scheduledUtc,
+                takenAt: takenAt,
+                skippedAt: skippedAt,
+                snoozedUntil: snoozedUntil,
+                snoozeCount: snoozeCount,
+                medicineName: medicineName,
+                dosageAmount: dosageAmount,
+                dosageUnit: dosageUnit,
+                form: form,
+                escalationWindowMinutes: escalationWindowMinutes,
+                followUpOffsetsMinutes: followUpOffsetsMinutes,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String scheduleId,
+                required String medicineId,
+                required String scheduledLocal,
+                required String ianaTimezone,
+                required String scheduledUtc,
+                Value<String?> takenAt = const Value.absent(),
+                Value<String?> skippedAt = const Value.absent(),
+                Value<String?> snoozedUntil = const Value.absent(),
+                Value<int> snoozeCount = const Value.absent(),
+                required String medicineName,
+                required double dosageAmount,
+                required String dosageUnit,
+                required String form,
+                required int escalationWindowMinutes,
+                required String followUpOffsetsMinutes,
+                Value<int> rowid = const Value.absent(),
+              }) => DosesCompanion.insert(
+                id: id,
+                scheduleId: scheduleId,
+                medicineId: medicineId,
+                scheduledLocal: scheduledLocal,
+                ianaTimezone: ianaTimezone,
+                scheduledUtc: scheduledUtc,
+                takenAt: takenAt,
+                skippedAt: skippedAt,
+                snoozedUntil: snoozedUntil,
+                snoozeCount: snoozeCount,
+                medicineName: medicineName,
+                dosageAmount: dosageAmount,
+                dosageUnit: dosageUnit,
+                form: form,
+                escalationWindowMinutes: escalationWindowMinutes,
+                followUpOffsetsMinutes: followUpOffsetsMinutes,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$DosesTable, DoseRow>(table),
+                  $$DosesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({scheduleId = false, medicineId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (scheduleId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.scheduleId,
+                                referencedTable: $$DosesTableReferences
+                                    ._scheduleIdTable(db),
+                                referencedColumn: $$DosesTableReferences
+                                    ._scheduleIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (medicineId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.medicineId,
+                                referencedTable: $$DosesTableReferences
+                                    ._medicineIdTable(db),
+                                referencedColumn: $$DosesTableReferences
+                                    ._medicineIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$DosesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DosesTable,
+      DoseRow,
+      $$DosesTableFilterComposer,
+      $$DosesTableOrderingComposer,
+      $$DosesTableAnnotationComposer,
+      $$DosesTableCreateCompanionBuilder,
+      $$DosesTableUpdateCompanionBuilder,
+      (DoseRow, $$DosesTableReferences),
+      DoseRow,
+      PrefetchHooks Function({bool scheduleId, bool medicineId})
     >;
 
 class $AppDatabaseManager {
@@ -2599,4 +4445,6 @@ class $AppDatabaseManager {
       $$MedicinesTableTableManager(_db, _db.medicines);
   $$SchedulesTableTableManager get schedules =>
       $$SchedulesTableTableManager(_db, _db.schedules);
+  $$DosesTableTableManager get doses =>
+      $$DosesTableTableManager(_db, _db.doses);
 }

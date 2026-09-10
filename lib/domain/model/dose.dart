@@ -45,6 +45,12 @@ final class Dose {
   /// them; a caller that wants the formula applied uses
   /// `escalation_window_policy.dart` first.
   ///
+  /// [medicineName], [dosageAmount], [dosageUnit] and [form] are AD-11's
+  /// frozen snapshot, required rather than defaulted: `resolve()` never reads
+  /// them, which is why Story 1.6 could leave them out, but Story 1.7a's
+  /// `DoseRepository` cannot round-trip a row that is missing columns it must
+  /// persist.
+  ///
   /// Throws [ArgumentError] when [ianaTimezone] is not shaped like a zone
   /// identifier (reusing `Schedule.isValidIanaTimezone`, so the two agree on
   /// what a zone looks like), when [escalationWindowMinutes] is not positive,
@@ -62,6 +68,10 @@ final class Dose {
     this.snoozeCount = 0,
     required this.escalationWindowMinutes,
     List<int> followUpOffsetsMinutes = defaultFollowUpOffsetsMinutes,
+    required this.medicineName,
+    required this.dosageAmount,
+    required this.dosageUnit,
+    required this.form,
   }) : scheduledLocal = scheduledLocal,
        followUpOffsetsMinutes = List<int>.unmodifiable(followUpOffsetsMinutes),
        id = '$scheduleId:${scheduledLocal.toIso8601String()}',
@@ -148,6 +158,30 @@ final class Dose {
   /// Dose's escalation chain at generation (AD-16). Unmodifiable.
   final List<int> followUpOffsetsMinutes;
 
+  /// The Medicine's name, frozen at generation (AD-11).
+  ///
+  /// A Medicine edit refreshes this on a Dose with no user action and never
+  /// touches one where [takenAt], [skippedAt] or [snoozedUntil] is set --
+  /// History reads this snapshot, never a live join to the Medicine, so a
+  /// later rename cannot rewrite what a recorded dose is shown as.
+  final String medicineName;
+
+  /// How much was taken at this occurrence, frozen at generation (AD-11). See
+  /// [medicineName] for why a live Medicine or Schedule edit must not reach
+  /// backwards through this Dose.
+  final double dosageAmount;
+
+  /// The unit [dosageAmount] is counted in, frozen at generation (AD-11). See
+  /// [medicineName].
+  final String dosageUnit;
+
+  /// Tablet, capsule, drops -- frozen at generation (AD-11). See
+  /// [medicineName]. Named explicitly here because the spine's ERD diagram
+  /// omits it from `DOSE`'s columns; that is a diagram error, not a second
+  /// source of truth -- AD-11's prose lists all four frozen fields and this is
+  /// one of them.
+  final String form;
+
   /// [escalationWindowMinutes] as a [Duration] -- what AD-2's pseudocode calls
   /// `p.window`, read from this Dose rather than from a separate policy
   /// argument (AD-16: the window comes from the Dose, never from current
@@ -192,7 +226,11 @@ final class Dose {
       other.snoozedUntil == snoozedUntil &&
       other.snoozeCount == snoozeCount &&
       other.escalationWindowMinutes == escalationWindowMinutes &&
-      _sameOffsets(other.followUpOffsetsMinutes, followUpOffsetsMinutes);
+      _sameOffsets(other.followUpOffsetsMinutes, followUpOffsetsMinutes) &&
+      other.medicineName == medicineName &&
+      other.dosageAmount == dosageAmount &&
+      other.dosageUnit == dosageUnit &&
+      other.form == form;
 
   @override
   int get hashCode => Object.hash(
@@ -207,6 +245,7 @@ final class Dose {
     snoozeCount,
     escalationWindowMinutes,
     Object.hashAll(followUpOffsetsMinutes),
+    Object.hash(medicineName, dosageAmount, dosageUnit, form),
   );
 
   static bool _sameOffsets(List<int> a, List<int> b) {

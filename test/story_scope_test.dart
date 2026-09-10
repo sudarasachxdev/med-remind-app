@@ -10,12 +10,17 @@
 // current story promised not to do, and each is DELETED by the story that is
 // allowed to do it -- the notification and permission entries by Story 3.1.
 // Story 1.4 removed `Medicines` and `Schedules` from the forbidden-table list
-// because Story 1.4 is the story that builds them; `Doses` stays, and Story 1.7
-// removes it. A failure here is either a scope leak or a stale guard, and the
-// message says which of the two to check.
+// because Story 1.4 is the story that builds them; `Doses` stayed until Story
+// 1.7a, which removed it in turn -- the list is empty again, kept rather than
+// deleted so a future story that leaves something not-yet-built has the same
+// mechanism to hand. A failure here is either a scope leak or a stale guard,
+// and the message says which of the two to check.
 //
 // Story 1.4's own absences are here too: no widget, no provider and no
-// `doses` table. This story ends at the port.
+// `doses` table -- both stories ended at a port. Story 1.7a's absence is a
+// new one: no `lib/app/` binding for `DoseRepository` either, added to
+// `_providerHomes` below exactly as Story 1.5 once had one there for
+// `MedicineRepository`.
 
 import 'dart:io';
 
@@ -84,15 +89,6 @@ const Map<String, String> _forbiddenIdentifiers = <String, String>{
       'shows the explainer and both of its actions go to Home.',
 };
 
-/// Table names this story must not create. Story 1.7 owns the one that is left.
-///
-/// `Medicines` and `Schedules` were here through Story 1.3 and were removed by
-/// Story 1.4, which builds them. `Doses` cannot arrive yet even in principle:
-/// generating doses needs the escalation policy Story 1.6 has not written, and
-/// AD-16 freezes that policy onto the row at generation -- a `doses` table
-/// built before the policy exists would have to be migrated the moment it did.
-const List<String> _forbiddenTables = <String>['Doses'];
-
 /// Directories this story must not add code to, mapped to the story that may.
 ///
 /// Story 1.4 ends at the port: the repository is reachable from the domain, and
@@ -103,24 +99,25 @@ const Map<String, String> _directoriesThisStoryDoesNotOwn = <String, String>{
       'Story 1.5 owns the add-medicine flow. This story ends at the port.',
 };
 
-/// Files that must not appear, with the reason.
+/// Directories that must not name a pending port's type, mapped to the reason.
 ///
 /// The no-provider half of this story's scope was guarded by looking in
 /// `lib/features/medicines` -- but every provider in this project lives in
 /// `lib/app/`, so a `medicineRepositoryProvider` added there passed a test
 /// whose name said no provider was added.
 ///
-/// EMPTY as of 2026-09-08. Its one entry forbade `lib/app/` from naming
-/// `MedicineRepository`, because Story 1.4 ended at the port and a screen
-/// arriving early would have skipped the design review the add flow needed.
-/// Story 1.5 is that flow and the port's first caller, so it retires the entry
-/// -- which is the house rule for this file: each guard is deleted by the story
-/// that is allowed to do the thing.
-///
-/// Left in place rather than removed so the next story that ends at a port has
-/// the mechanism to hand, and so the test below stays honest about guarding
-/// nothing rather than being quietly deleted.
-const Map<String, String> _providerHomes = <String, String>{};
+/// Its one entry forbade `lib/app/` from naming `MedicineRepository`, from
+/// Story 1.4 (which ended at the port) until Story 1.5 (that port's first
+/// caller) retired it -- the house rule for this file: each guard is deleted
+/// by the story that is allowed to do the thing. It stayed empty until Story
+/// 1.7a, which is in the same position Story 1.4 was: `DoseRepository` has no
+/// caller yet either, Story 1.7b is that caller, so this is the mechanism
+/// Story 1.5's retirement left waiting, used for the first time since.
+const Map<String, String> _providerHomes = <String, String>{
+  'lib/app':
+      'Story 1.7b is DoseRepository\'s first caller. This story ends at the '
+      'port, exactly as Story 1.4 did for MedicineRepository.',
+};
 
 /// Identifiers that must not appear in a domain model file, by file.
 ///
@@ -268,21 +265,17 @@ void main() {
   test('a port with no caller yet is kept out of the composition root', () {
     // Named for the mechanism, not for one story's absence. It was called "the
     // repository is not wired into the composition root yet" until 2026-09-08,
-    // when Story 1.5 wired it -- at which point the old name was a false claim
-    // sitting on top of a loop over an empty map, which passes for the worst
-    // possible reason.
+    // when Story 1.5 wired MedicineRepository -- at which point the old name
+    // was a false claim sitting on top of a loop over an empty map, which
+    // passes for the worst possible reason.
     //
-    // So the guard now states both halves. Below: whatever `_providerHomes`
-    // still forbids is really absent. Here: the entry Story 1.5 retired is
-    // really gone, so an empty map means "nothing is pending" rather than
-    // "someone deleted the guard".
-    expect(
-      _providerHomes,
-      isEmpty,
-      reason:
-          'A pending port is listed here. If that is Story 1.5\'s repository '
-          'entry, it should have been retired when the add flow landed.',
-    );
+    // So the guard states two things. First, that the entry Story 1.5 retired
+    // stayed retired: `medicine_repository_provider.dart` exists, which is
+    // only true once the binding landed, so a `_providerHomes` entry re-added
+    // for `MedicineRepository` would be a guard that regressed rather than one
+    // that still protects something. Second -- the loop below -- that whatever
+    // `_providerHomes` currently forbids (Story 1.7a's `DoseRepository` entry)
+    // is really absent from the directory it names.
     expect(
       File('lib/app/medicine_repository_provider.dart').existsSync(),
       isTrue,
@@ -308,8 +301,8 @@ void main() {
               .where((File f) => f.path.endsWith('.dart'))) {
         final String code = _withoutComments(file.readAsStringSync());
         for (final String named in <String>[
-          'MedicineRepository',
-          'DriftMedicineRepository',
+          'DoseRepository',
+          'DriftDoseRepository',
         ]) {
           expect(
             code,
@@ -362,24 +355,6 @@ void main() {
             '$layer should hold nothing but its .gitkeep until Epic 3. '
             'Found: ${dartFiles.join(', ')}',
       );
-    }
-  });
-
-  test('no dose table is declared', () {
-    // The database test asserts the schema SQLite actually creates. This
-    // asserts the Dart, so a table declared but not yet wired into
-    // @DriftDatabase is caught too.
-    for (final ({String path, String source}) file in sources) {
-      final String code = _withoutComments(file.source);
-      for (final String table in _forbiddenTables) {
-        expect(
-          code,
-          isNot(contains('class $table extends Table')),
-          reason:
-              '${file.path} declares $table. Story 1.7 owns Dose, and it '
-              'needs the escalation policy Story 1.6 has not written yet.',
-        );
-      }
     }
   });
 

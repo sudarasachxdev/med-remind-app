@@ -8,6 +8,14 @@
 // duplicate-schedule rule and the delete cascade, and one of the two copies
 // would be the one that is wrong.
 //
+// `deleteMedicine` also deletes matching rows from `doses` directly, rather
+// than through `DriftDoseRepository` -- AD-12's "in one transaction" promise
+// (FR-3) needs one transaction spanning all three tables, and Dose's own
+// aggregate boundary (AD-12) is about the DOMAIN reaching doses only through
+// `DoseRepository`, not about which adapter may hold the connection. This is
+// the one sanctioned place that reaches past it; `DriftDoseRepository` itself
+// still owns every other write to `doses`.
+//
 // This file is also the translation boundary the spine's Errors convention
 // names. Nothing that is not a `MedicineRepositoryFailure` leaves it: a row
 // SQLite hands back in a shape the domain refuses -- a malformed date, a
@@ -143,27 +151,31 @@ final class DriftMedicineRepository implements MedicineRepository {
 
   @override
   Future<void> deleteMedicine(String id) {
-    // One transaction, both deletes (AD-12). `schedules.medicine_id` also
-    // declares ON DELETE CASCADE, so the database would remove them anyway --
-    // that is the guarantee for any future path, including a raw statement.
-    // The explicit delete is here because AD-12's promise is "in one
-    // transaction", and a promise that only a pragma keeps is a promise that
-    // silently stops being kept the day the pragma is not set. Both deletes
-    // either happen or neither does; a failure part-way can never leave a
-    // Medicine without its Schedules (orphaned reminders) or Schedules without
-    // their Medicine (reminders for a medicine the user cannot see).
+    // One transaction, all three deletes (AD-12) -- FR-3's full promise as of
+    // Story 1.7a: "deleting a Medicine cascades to its Schedules and its Doses
+    // in one transaction." `schedules.medicine_id` and `doses.medicine_id` both
+    // also declare ON DELETE CASCADE, so the database would remove every row
+    // anyway -- that is the guarantee for any future path, including a raw
+    // statement. The explicit deletes are here because AD-12's promise is "in
+    // one transaction", and a promise that only a pragma keeps is a promise
+    // that silently stops being kept the day the pragma is not set. All three
+    // either happen or none does; a failure part-way can never leave a
+    // Medicine without its Schedules or Doses, Schedules without their
+    // Medicine, or a Dose outliving either the Schedule that generated it or
+    // the Medicine it belongs to.
     //
-    // Schedules first: with `PRAGMA foreign_keys` on and no cascade, deleting
-    // the Medicine first would be rejected by the foreign key.
-    //
-    // INCOMPLETE BY SCOPE, not by oversight. AD-12 and FR-3 name three tables:
-    // "deleting a Medicine cascades to its Schedules and its Doses in one
-    // transaction". `doses` does not exist yet -- Story 1.7 owns it, and it
-    // needs the escalation policy Story 1.6 has not written. Story 1.7 must
-    // add the third delete to THIS transaction and declare the cascade on the
-    // `doses` foreign key; deleting doses from anywhere else would put the
-    // cascade in two places, which is what AD-12 exists to prevent.
+    // Doses first, then Schedules, then the Medicine: with `PRAGMA
+    // foreign_keys` on, deleting a parent while a child still references it is
+    // rejected by the foreign key. A Dose's `medicine_id` is denormalised
+    // (AD-20) so it names the SAME Medicine as the Schedule that generated it
+    // -- filtering on `medicine_id` here removes every Dose of every Schedule
+    // this Medicine owns in one statement, so Doses are safely gone before
+    // Schedules are touched, regardless of whether `doses.schedule_id`'s own
+    // cascade would also have caught them.
     return _database.transaction<void>(() async {
+      await (_database.delete(
+        _database.doses,
+      )..where(($DosesTable t) => t.medicineId.equals(id))).go();
       await (_database.delete(
         _database.schedules,
       )..where(($SchedulesTable t) => t.medicineId.equals(id))).go();

@@ -41,10 +41,12 @@ import '../model/schedule.dart';
 ///     Schedule's frequency and its companion fields do not agree, and
 ///     [DuplicateScheduleFailure] when the result would duplicate an existing
 ///     Schedule. In both cases nothing is written,
-///   * [deleteMedicine] removes the Medicine and every Schedule it owns in one
-///     transaction. A failure part-way leaves *neither* removed -- never the
-///     Medicine without its Schedules, which would orphan reminders, and never
-///     the Schedules without their Medicine, which would silently stop them.
+///   * [deleteMedicine] removes the Medicine, every Schedule it owns, and
+///     every Dose generated from any of them, in one transaction. A failure
+///     part-way leaves *none* of the three removed -- never the Medicine
+///     without its Schedules or Doses, which would orphan reminders, and
+///     never the Schedules or Doses without their Medicine, which would
+///     silently stop them.
 ///
 /// A read of something absent is not a failure: [findMedicine] answers `null`
 /// and [schedulesFor] answers an empty list.
@@ -104,15 +106,15 @@ abstract interface class MedicineRepository {
   /// medicine the user deleted on another surface.
   Future<void> saveMedicine(Medicine medicine);
 
-  /// Deletes the Medicine with [id] and every Schedule it owns, in one
-  /// transaction (AD-12).
+  /// Deletes the Medicine with [id], every Schedule it owns, and every Dose
+  /// generated from any of them, in one transaction (AD-12, FR-3).
   ///
   /// Idempotent: deleting an id that is not stored is not an error, so a second
   /// tap on a confirmed delete needs no guard at the call site.
   ///
-  /// AD-12 and FR-3 name three tables, not two: a Medicine's Doses go with it
-  /// as well. `doses` does not exist yet -- Story 1.7 owns it -- so Story 1.7
-  /// must extend this transaction rather than delete doses from somewhere else.
+  /// The Dose half landed in Story 1.7a, which extended this same transaction
+  /// rather than deleting Doses from anywhere else -- a second cascade path is
+  /// exactly what AD-12 exists to prevent.
   Future<void> deleteMedicine(String id);
 
   /// The Schedules of the Medicine with [medicineId], earliest time first.

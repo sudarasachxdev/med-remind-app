@@ -15,9 +15,9 @@
 // column that must NOT exist, and which no comparison of two schemas to each
 // other could ever catch.
 //
-// This also pins the story's scope: `app_settings`, `medicines` and `schedules`
-// are the ONLY tables. `doses` belongs to Story 1.7, and the table-set test
-// fails the day it arrives early.
+// This also pins the schema's scope at each version: `app_settings`,
+// `medicines` and `schedules` were the only tables through Story 1.6; `doses`
+// (Story 1.7a) is the fourth and, for now, the last.
 
 import 'dart:io';
 
@@ -46,28 +46,27 @@ void main() {
     await database.close();
   });
 
-  group('AppDatabase at schema version 2', () {
-    test('declares version 2', () {
+  group('AppDatabase at schema version 3', () {
+    test('declares version 3', () {
       expect(
         database.schemaVersion,
-        2,
+        3,
         reason:
-            'AD-15: adding medicines and schedules is a schema change, so the '
-            'version bumps. Leaving it at 1 would mean an installed app never '
-            'calls onUpgrade and runs the new code against the old schema.',
+            'AD-15: adding doses is a schema change, so the version bumps. '
+            'Leaving it at 2 would mean an installed app never calls '
+            'onUpgrade and runs this story\'s code against the old schema.',
       );
     });
 
-    test('creates exactly three tables and no fourth', () async {
+    test('creates exactly four tables and no fifth', () async {
       final List<String> tables = await _tableNames(database);
 
       expect(
         tables,
-        equals(<String>['app_settings', 'medicines', 'schedules']),
+        equals(<String>['app_settings', 'doses', 'medicines', 'schedules']),
         reason:
-            'Story 1.4 owns medicines and schedules. `doses` belongs to Story '
-            '1.7, which needs the escalation policy Story 1.6 has not written '
-            'yet; if it is here, scope has leaked.',
+            'Story 1.4 owns medicines and schedules; Story 1.7a owns doses. '
+            'A fifth table here means scope has leaked.',
       );
     });
 
@@ -164,7 +163,7 @@ void main() {
             .customSelect('PRAGMA user_version')
             .get();
 
-        expect(rows.single.data['user_version'], 2);
+        expect(rows.single.data['user_version'], 3);
       },
     );
 
@@ -224,7 +223,7 @@ void main() {
             'install left behind. Found: '
             '${directory.listSync().map((FileSystemEntity e) => e.uri.pathSegments.last).toList()}',
       );
-      expect(production.schemaVersion, 2);
+      expect(production.schemaVersion, 3);
     });
   });
 
@@ -242,14 +241,15 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final File file = File('${directory.path}/db.sqlite');
 
-      // A file written by a future build: schema version 3. It has to be
-      // ABOVE this build's version, and this build is now at 2 -- a test that
-      // kept writing 2 here would silently stop testing a downgrade the moment
-      // the app reached that version, which is what happened to this line in
-      // this very story.
+      // A file written by a future build: schema version 4. It has to be
+      // ABOVE this build's version, and this build is now at 3 -- a test that
+      // kept writing 3 here would silently stop testing a downgrade the moment
+      // the app reached that version, which is exactly what happened to this
+      // line when the app moved from Story 1.3's version to Story 1.4's, and
+      // has now happened again moving to Story 1.7a's.
       final AppDatabase future = AppDatabase(NativeDatabase(file));
       await future.customSelect('SELECT 1').get();
-      await future.customStatement('PRAGMA user_version = 3');
+      await future.customStatement('PRAGMA user_version = 4');
       await future.close();
 
       final AppDatabase current = AppDatabase(NativeDatabase(file));
@@ -262,12 +262,12 @@ void main() {
               .having(
                 (AppDatabaseVersionMismatch e) => e.storedVersion,
                 'storedVersion',
-                3,
+                4,
               )
               .having(
                 (AppDatabaseVersionMismatch e) => e.appVersion,
                 'appVersion',
-                2,
+                3,
               )
               .having(
                 (AppDatabaseVersionMismatch e) => e.isDowngrade,
@@ -331,7 +331,7 @@ void main() {
       await future.customStatement(
         'CREATE TABLE a_table_from_the_future (x INTEGER)',
       );
-      await future.customStatement('PRAGMA user_version = 3');
+      await future.customStatement('PRAGMA user_version = 4');
       await future.close();
       final int sizeBefore = file.lengthSync();
 
@@ -530,9 +530,9 @@ void main() {
       // drifts by an hour twice a year, which is the failure class the PRD
       // found in competitor app-store reviews.
       //
-      // Story 1.7's `doses` table is the one place a UTC instant is allowed,
-      // as a denormalised ordering column. When it arrives, this test moves to
-      // exempting that one column by name -- it does not get deleted.
+      // Story 1.7a's `doses.scheduled_utc` is the one place a UTC instant is
+      // allowed, as a denormalised ordering column -- exempted below by name,
+      // exactly as this comment promised when it arrived.
       const List<String> instantish = <String>[
         'utc',
         'epoch',
@@ -559,6 +559,13 @@ void main() {
           table,
         )) {
           final String name = (column['name'] as String).toLowerCase();
+
+          // The one sanctioned exception, promised above: a denormalised UTC
+          // instant, for ordering only. AD-6's own stored truth on a Dose is
+          // `scheduled_local` + `iana_timezone`; this column is never read as
+          // if it were that truth.
+          if (table == 'doses' && name == 'scheduled_utc') continue;
+
           for (final String banned in instantish) {
             expect(
               name,
@@ -566,7 +573,7 @@ void main() {
               reason:
                   '$table.$name looks like a UTC instant. AD-6: a Schedule '
                   'stores a wall clock and an IANA zone, and the product\'s '
-                  'only UTC value is Story 1.7\'s Dose ordering column.',
+                  'only UTC value is doses.scheduled_utc.',
             );
           }
 
@@ -649,6 +656,127 @@ void main() {
     });
   });
 
+  group('doses -- Dose\'s own aggregate, and the cascade Story 1.7a finishes '
+      '(AD-12)', () {
+    test('holds exactly the ERD\'s sixteen columns, form included', () async {
+      expect(
+        await _columnShapes(database, 'doses'),
+        equals(<String>[
+          'id TEXT notnull',
+          'schedule_id TEXT notnull',
+          'medicine_id TEXT notnull',
+          'scheduled_local TEXT notnull',
+          'iana_timezone TEXT notnull',
+          'scheduled_utc TEXT notnull',
+          'taken_at TEXT nullable',
+          'skipped_at TEXT nullable',
+          'snoozed_until TEXT nullable',
+          'snooze_count INTEGER notnull',
+          'medicine_name TEXT notnull',
+          'dosage_amount REAL notnull',
+          'dosage_unit TEXT notnull',
+          'form TEXT notnull',
+          'escalation_window_minutes INTEGER notnull',
+          'follow_up_offsets_minutes TEXT notnull',
+        ]),
+        reason:
+            'AD-11\'s prose, not the spine\'s ERD mermaid block, is '
+            'authoritative: the diagram omits form, which this spec names as '
+            'a diagram error rather than a second source of truth.',
+      );
+    });
+
+    test('snooze_count defaults to 0', () async {
+      final Map<String, Object?> snoozeCount = (await _tableInfo(
+        database,
+        'doses',
+      )).firstWhere((Map<String, Object?> c) => c['name'] == 'snooze_count');
+
+      expect(snoozeCount['dflt_value'], '0');
+    });
+
+    test(
+      'both medicine_id and schedule_id are foreign keys that cascade',
+      () async {
+        final String sql = await _createStatement(database, 'doses');
+
+        expect(sql, contains('REFERENCES medicines'));
+        expect(sql, contains('REFERENCES schedules'));
+        expect(
+          'ON DELETE CASCADE'.allMatches(sql).length,
+          2,
+          reason:
+              'AD-12: a Dose has no life without either the Medicine it '
+              'belongs to or the Schedule that generated it -- the database\'s '
+              'own guarantee for any write path, including a raw statement.',
+        );
+      },
+    );
+
+    test('(schedule_id, scheduled_local) is a unique index (AD-10)', () async {
+      final String sql = await _createStatement(database, 'doses');
+      expect(
+        sql,
+        contains('UNIQUE'),
+        reason:
+            'the unique index is the truth, not the id string -- see this '
+            'spec\'s "Duplicate natural key" row',
+      );
+
+      await database.customStatement(_insertMedicine);
+      await database.customStatement(_insertSchedule);
+      await database.customStatement(_insertDose);
+
+      // Declared is not enforced without `PRAGMA foreign_keys`/the index
+      // actually being built; the positive control below proves the first
+      // insert above was accepted, so this rejection is evidence about the
+      // constraint rather than about a typo in the statement.
+      await expectLater(
+        database.customStatement(
+          _insertDose.replaceFirst("'dose-1'", "'dose-2'"),
+        ),
+        throwsA(
+          isA<SqliteException>().having(
+            (SqliteException e) => e.message,
+            'message',
+            contains('UNIQUE constraint failed'),
+          ),
+        ),
+      );
+
+      final List<QueryRow> rows = await database
+          .customSelect('SELECT id FROM doses')
+          .get();
+      expect(rows, hasLength(1));
+    });
+
+    test('the cascade removes doses when the medicine goes', () async {
+      await database.customStatement(_insertMedicine);
+      await database.customStatement(_insertSchedule);
+      await database.customStatement(_insertDose);
+
+      await database.customStatement("DELETE FROM medicines WHERE id = 'm1'");
+
+      final List<QueryRow> left = await database
+          .customSelect('SELECT id FROM doses')
+          .get();
+      expect(left, isEmpty);
+    });
+
+    test('the cascade removes doses when the schedule goes', () async {
+      await database.customStatement(_insertMedicine);
+      await database.customStatement(_insertSchedule);
+      await database.customStatement(_insertDose);
+
+      await database.customStatement("DELETE FROM schedules WHERE id = 's1'");
+
+      final List<QueryRow> left = await database
+          .customSelect('SELECT id FROM doses')
+          .get();
+      expect(left, isEmpty);
+    });
+  });
+
   group('completion survives a real reopen', () {
     test('a flag written to a file is read back after closing it', () async {
       // The in-memory tests cannot show this: they hold one connection for the
@@ -682,7 +810,7 @@ void main() {
           .get();
       expect(
         version.single.data['user_version'],
-        2,
+        3,
         reason:
             'the version has to come back off disk, or onUpgrade never fires',
       );
@@ -768,6 +896,16 @@ const String _insertSchedule =
     'INSERT INTO schedules (id, medicine_id, time_of_day, iana_timezone, '
     'frequency, dosage_amount) '
     "VALUES ('s1', 'm1', '08:00', 'Asia/Colombo', 'everyDay', 1.0)";
+
+/// One well-formed `doses` row on `s1`/`m1`. See [_insertMedicine].
+const String _insertDose =
+    'INSERT INTO doses (id, schedule_id, medicine_id, scheduled_local, '
+    'iana_timezone, scheduled_utc, medicine_name, dosage_amount, '
+    'dosage_unit, form, escalation_window_minutes, '
+    'follow_up_offsets_minutes) '
+    "VALUES ('dose-1', 's1', 'm1', '2026-09-09T08:00:00.000', "
+    "'Asia/Colombo', '2026-09-09T02:30:00.000Z', 'Metformin', 1.0, "
+    "'tablet', 'tablet', 60, '15,30,60')";
 
 /// SQLite refused the statement because a `CHECK` constraint failed.
 ///
