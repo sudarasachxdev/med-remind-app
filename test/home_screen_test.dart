@@ -34,6 +34,7 @@ import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
+import 'package:med_remind_app/domain/policy/snooze_policy.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
 import 'package:med_remind_app/features/add_medicine/domain/add_medicine_draft.dart';
@@ -411,6 +412,127 @@ void main() {
         reason: 'the overdue chip states the word and the original time',
       );
     });
+
+    testWidgets('Taken, Skipped and Snoozed each render their own chip once '
+        'DoseRecorder has written real facts for them (Story 2.3)', (
+      tester,
+    ) async {
+      await pumpHome(
+        tester,
+        seed: (medicines) async {
+          final Medicine taken = await addMedicine(medicines, name: 'TakenMed');
+          await addSchedule(medicines, taken.id, timeOfDay: '08:00');
+          final Medicine skipped = await addMedicine(
+            medicines,
+            name: 'SkippedMed',
+          );
+          await addSchedule(medicines, skipped.id, timeOfDay: '09:00');
+          final Medicine snoozed = await addMedicine(
+            medicines,
+            name: 'SnoozedMed',
+          );
+          await addSchedule(medicines, snoozed.id, timeOfDay: '10:00');
+        },
+      );
+
+      Finder cardFor(String medicineName) => find.ancestor(
+        of: find.text(medicineName),
+        matching: find.byType(DoseCard),
+      );
+
+      // Each of the three starts Due (all within the default 6h window of
+      // `defaultNow`) -- the sheet is the only entry point this test uses,
+      // one medicine at a time, so a still-Due card's own check icon is
+      // never ambiguous between them. Each action's own toast is flushed
+      // before the next tap -- unlike this group's other, single-action
+      // tests, three unflushed toasts here would stack at the bottom of the
+      // screen and physically block the next sheet's own bottom-most
+      // action from ever receiving a tap.
+      await tester.tap(
+        find.descendant(
+          of: cardFor('TakenMed'),
+          matching: find.byIcon(Icons.check),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(HomeCopy.sheetTakeAction));
+      await tester.pumpAndSettle();
+      await tester.pump(mtToastDuration);
+
+      await tester.tap(
+        find.descendant(
+          of: cardFor('SkippedMed'),
+          matching: find.byIcon(Icons.check),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(HomeCopy.sheetSkipAction));
+      await tester.pumpAndSettle();
+      await tester.pump(mtToastDuration);
+
+      await tester.tap(
+        find.descendant(
+          of: cardFor('SnoozedMed'),
+          matching: find.byIcon(Icons.check),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.text(HomeCopy.sheetSnoozeAction(defaultSnoozeInterval.inMinutes)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(HomeCopy.stateTaken(defaultNow)), findsOneWidget);
+      expect(find.text(HomeCopy.stateSkipped), findsOneWidget);
+      expect(
+        find.text(HomeCopy.stateSnoozed(defaultSnoozeInterval.inMinutes)),
+        findsOneWidget,
+      );
+
+      // Flushes the third toast's own auto-dismiss `Timer`.
+      await tester.pump(mtToastDuration);
+    });
+  });
+
+  group('the last dose of the day (UX-DR21\'s negative requirement)', () {
+    testWidgets(
+      'recording the only Dose of the day shows no celebratory animation, '
+      'streak, badge or points -- the absence is what this test asserts',
+      (tester) async {
+        await pumpHome(
+          tester,
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+
+        await tester.tap(find.byIcon(Icons.check));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(HomeCopy.sheetTakeAction));
+        await tester.pumpAndSettle();
+
+        expect(find.text(HomeCopy.progressLabel(1, 1)), findsOneWidget);
+        expect(
+          find.byWidgetPredicate((Widget widget) {
+            final String type = widget.runtimeType.toString().toLowerCase();
+            return type.contains('confetti') ||
+                type.contains('celebrat') ||
+                type.contains('streak') ||
+                type.contains('badge');
+          }),
+          findsNothing,
+        );
+        expect(
+          find.textContaining('!'),
+          findsNothing,
+          reason: 'no exclamation mark anywhere, including on this path',
+        );
+
+        // Flushes the toast's own auto-dismiss `Timer`.
+        await tester.pump(mtToastDuration);
+      },
+    );
   });
 
   group('the two entry points to DoseRecorder (Story 2.2)', () {

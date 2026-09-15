@@ -1,8 +1,19 @@
-// The dose card, in the three variants this story is scoped to: plain
-// (Scheduled), due, and overdue -- `resolve()` on any Epic-1-generated Dose
-// can produce only these plus Missed, which this spec's own Boundaries note
-// does not practically occur here (Home shows only today's Doses, and Missed
-// is a prior-day state).
+// The dose card, in six of the seven states `resolve()` can produce: plain
+// (Scheduled), due, overdue (Story 1.8/2.2), and -- Story 2.3 -- Taken,
+// Skipped and Snoozed, the three `DoseRecorder` (Story 2.2) now writes real
+// facts for. Missed is the one state never rendered here (this story's own
+// Never rule): `EXPERIENCE.md` scopes it to History, and Home shows only
+// today's Doses, which a Missed Dose does not practically remain among.
+//
+// STORY 2.3's THREE NEW VARIANTS (`_TakenDoseCard`, `_SkippedDoseCard`,
+// `_SnoozedDoseCard`) share one shell, `_StaticDoseCard`, and are all
+// non-interactive: no trailing control, no `GestureDetector`, no sheet.
+// There is nothing left to do with an already-acted-on Dose, and this
+// story's own Never rule is no new `DoseRecorder` calls and no new refusal
+// handling -- Story 2.2 built the write path, this story only renders what
+// it produces. Each still carries its own merged `Semantics` label, the same
+// "one label per card" shape the interactive variants use, just with nothing
+// behind it to activate.
 //
 // STORY 2.2 WIRES BOTH ENTRY POINTS TO `DoseRecorder`, deliberately not the
 // same shape: the plain/due trailing control opens `DoseActionSheet`
@@ -27,9 +38,16 @@
 // carries a word, and the overdue card's left border and chip both read from
 // `state-late-*`, never red -- DESIGN.md's own note that the delivered mock
 // draws `isOverdue` in defective grey is corrected here, not reproduced.
+// Taken and Skipped are the other two states `EXPERIENCE.md`'s State
+// Patterns table assigns a mark to (`✓`, `–`); both marks are folded into the
+// chip's own word rather than drawn a second time, and Skipped's chip reuses
+// `stateNeutralTile`/`inkMuted` -- never red -- per that table and
+// DESIGN.md's own note.
 //
 // The glyph tile's tint is per-Medicine (AD-22) and is drawn by `GlyphTile`
-// alone; only the left border and the chip read from `resolve()` -- the two
+// alone, on EVERY variant including Taken/Skipped/Snoozed (this story's own
+// Boundaries -- generalising the rule Story 1.8 stated only for the Due
+// card); only the left border and the chip read from `resolve()` -- the two
 // colour systems never mix on one card.
 
 import 'package:flutter/material.dart';
@@ -48,21 +66,35 @@ import 'home_copy.dart';
 
 /// One row of Home's dose list.
 class DoseCard extends StatelessWidget {
-  const DoseCard({required this.entry, super.key});
+  const DoseCard({required this.entry, required this.now, super.key});
 
   /// The Dose, its resolved state, and the two Medicine fields it does not
   /// itself freeze.
   final HomeDoseEntry entry;
+
+  /// The instant `entry.resolution` was resolved against -- `HomePlan.now`,
+  /// threaded down rather than re-read from the clock here. The only variant
+  /// that needs it is `_SnoozedDoseCard`, whose "reminder in {n} min" is a
+  /// fresh `now`-to-`snoozedUntil` computation, not a value `resolve()`
+  /// itself carries.
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
     return switch (entry.resolution.state) {
       DoseState.overdue => _OverdueDoseCard(entry: entry),
       DoseState.due => _PlainOrDueDoseCard(entry: entry, isDue: true),
-      // `scheduled` is the ordinary case; any other state reaching here
-      // (Missed, or one of Epic 2's states arriving early through a future
-      // regression) renders as the neutral, no-border treatment rather than
-      // throwing -- Home degrades to a plain card instead of a crash.
+      // Story 2.3: the three states `DoseRecorder` (Story 2.2) can now
+      // produce. None is interactive -- this story's own Never rule is no
+      // new `DoseRecorder` calls, and there is nothing left to do with an
+      // already-acted-on Dose from here.
+      DoseState.taken => _TakenDoseCard(entry: entry),
+      DoseState.skipped => _SkippedDoseCard(entry: entry),
+      DoseState.snoozed => _SnoozedDoseCard(entry: entry, now: now),
+      // `scheduled` is the ordinary case; `missed` reaching here (Home shows
+      // only today's Doses, and Missed is a prior-day state per this story's
+      // own Never rule) renders as the neutral, no-border treatment rather
+      // than throwing -- Home degrades to a plain card instead of a crash.
       _ => _PlainOrDueDoseCard(entry: entry, isDue: false),
     };
   }
@@ -395,6 +427,191 @@ class _OverdueDoseCardState extends ConsumerState<_OverdueDoseCard> {
         _errorMessage = failure.message;
       });
     }
+  }
+}
+
+/// The shared shell for Story 2.3's three "already resolved" cards -- Taken,
+/// Skipped and Snoozed. None is interactive: unlike `_PlainOrDueDoseCard`/
+/// `_OverdueDoseCard`, there is no trailing control, no `GestureDetector` and
+/// no sheet, because there is nothing left to do with a Dose one of these
+/// three actions has already resolved (this story's own Never rule: no new
+/// `DoseRecorder` calls, no new refusal handling).
+///
+/// Same shell as the plain (Scheduled) card otherwise -- `MTRadius.lg`,
+/// `MTElevation.raised`, no left border, `GlyphTile(glyphIndex:...)` per
+/// AD-22 -- so the only per-variant differences are [nameColor] and [chip].
+class _StaticDoseCard extends StatelessWidget {
+  const _StaticDoseCard({
+    required this.entry,
+    required this.stateWord,
+    required this.nameColor,
+    required this.chip,
+  });
+
+  final HomeDoseEntry entry;
+
+  /// The word this card's merged `Semantics` label ends on.
+  final String stateWord;
+
+  /// `inkMuted` for Taken (DESIGN.md's "dimmed"), `inkPrimary` for the other
+  /// two -- Skipped's own recessive treatment lives entirely on its chip
+  /// (`stateNeutralTile`/`inkMuted`, DESIGN.md's own pairing), not on its
+  /// name, and Snoozed carries no dimming at all.
+  final Color nameColor;
+
+  /// This variant's own `_StatusChip`.
+  final Widget chip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: _cardLabel(entry, stateWord),
+      // No `button`/`onTap` here, unlike `_PlainOrDueDoseCard` -- this is a
+      // label-only node because there is nothing behind this card to
+      // activate, not because the label itself is announced any
+      // differently.
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          borderRadius: BorderRadius.all(Radius.circular(MTRadius.lg)),
+          boxShadow: <BoxShadow>[MTElevation.raised],
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.all(Radius.circular(MTRadius.lg)),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(color: MTColors.surfaceRaised),
+            child: Padding(
+              padding: const EdgeInsets.all(MTSpacing.s3),
+              child: Row(
+                children: <Widget>[
+                  ExcludeSemantics(
+                    child: GlyphTile(glyphIndex: entry.glyphIndex),
+                  ),
+                  const SizedBox(width: MTSpacing.s3),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          entry.dose.medicineName,
+                          style: MTTypography.title.copyWith(color: nameColor),
+                        ),
+                        const SizedBox(height: MTSpacing.s1),
+                        Text(
+                          HomeCopy.metaLine(
+                            condition: entry.condition,
+                            amount: entry.dose.dosageAmount,
+                            unit: entry.dose.dosageUnit,
+                          ),
+                          style: MTTypography.meta.copyWith(
+                            color: MTColors.inkMuted,
+                          ),
+                        ),
+                        const SizedBox(height: MTSpacing.s2),
+                        chip,
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A recorded-taken Dose (Story 2.3). Dimmed (DESIGN.md's Components note)
+/// via [_StaticDoseCard.nameColor], and its chip reads `dose.takenAt`, never
+/// `dose.scheduledAt` -- the spec's own AC1: changing `scheduledAt` cannot
+/// change what this card shows.
+class _TakenDoseCard extends StatelessWidget {
+  const _TakenDoseCard({required this.entry});
+
+  /// `entry.resolution.state == DoseState.taken` is this widget's only
+  /// caller-enforced precondition (the `DoseCard` switch above), and
+  /// `resolve()`'s own Taken branch requires `dose.takenAt != null` to reach
+  /// it -- so the `!` below is a contract already proven, not a new
+  /// assumption.
+  final HomeDoseEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final String chipText = HomeCopy.stateTaken(entry.dose.takenAt!);
+    return _StaticDoseCard(
+      entry: entry,
+      stateWord: chipText,
+      nameColor: MTColors.inkMuted,
+      chip: _StatusChip(
+        text: chipText,
+        background: MTColors.stateTakenTile,
+        ink: MTColors.stateTakenMark,
+      ),
+    );
+  }
+}
+
+/// A recorded-skipped Dose (Story 2.3) -- recessive, never red: the chip
+/// reuses `stateNeutralTile`/`inkMuted`, the same pairing the plain
+/// (Scheduled) card's own chip already draws from, per DESIGN.md's own
+/// "a skipped dose is neutral" note.
+class _SkippedDoseCard extends StatelessWidget {
+  const _SkippedDoseCard({required this.entry});
+
+  final HomeDoseEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StaticDoseCard(
+      entry: entry,
+      stateWord: HomeCopy.stateSkipped,
+      // Not dimmed -- only Taken carries DESIGN.md's "dimmed" note. Skipped's
+      // own recessiveness lives on its chip alone.
+      nameColor: MTColors.inkPrimary,
+      chip: const _StatusChip(
+        text: HomeCopy.stateSkipped,
+        background: MTColors.stateNeutralTile,
+        ink: MTColors.inkMuted,
+      ),
+    );
+  }
+}
+
+/// A live-snoozed Dose (Story 2.3). The table assigns this state no mark, so
+/// its chip stays word-only, in the same accent-wash/accent-ink pairing the
+/// due card's own chip already uses (the mock's own `chipBg:VL, chipFg:V` for
+/// its snoozed example).
+class _SnoozedDoseCard extends StatelessWidget {
+  const _SnoozedDoseCard({required this.entry, required this.now});
+
+  final HomeDoseEntry entry;
+
+  /// `HomePlan.now`, threaded down from `DoseCard` -- see that class's own
+  /// doc comment for why this is the one variant that needs it.
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    // `resolve()`'s Snoozed branch requires `snoozedUntil != null` to reach
+    // this widget, so the `!` is a proven contract, matching `_TakenDoseCard`.
+    final DateTime snoozedUntil = entry.dose.snoozedUntil!;
+    // Rounded, not truncated (this spec's own Boundaries: "the rounded
+    // minutes from now to snoozedUntil") -- `Duration.inMinutes` truncates
+    // towards zero, which would read a dose one minute out as "0 min" rather
+    // than "1 min" (this spec's own matrix row).
+    final int minutes = (snoozedUntil.difference(now).inSeconds / 60).round();
+    final String chipText = HomeCopy.stateSnoozed(minutes);
+    return _StaticDoseCard(
+      entry: entry,
+      stateWord: chipText,
+      nameColor: MTColors.inkPrimary,
+      chip: _StatusChip(
+        text: chipText,
+        background: MTColors.accentWash,
+        ink: MTColors.accentInk,
+      ),
+    );
   }
 }
 

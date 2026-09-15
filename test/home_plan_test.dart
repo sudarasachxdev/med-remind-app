@@ -23,13 +23,16 @@ import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/dose_state.dart';
 import 'package:med_remind_app/domain/port/clock.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/model/schedule.dart';
+import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
+import 'package:med_remind_app/domain/service/dose_recorder.dart';
 import 'package:med_remind_app/features/home/application/home_plan_controller.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
@@ -101,6 +104,56 @@ void main() {
     frequency: Frequency.everyDay,
     dosageAmount: 1,
   );
+
+  /// Records the Dose scheduled at [hour] on [day] through `DoseRecorder` --
+  /// the only permitted writer (AD-4) -- so this file's own "real acted-on
+  /// Doses" rows prove `HomePlanController`'s existing counting/next-dose
+  /// logic against genuine Taken/Skipped/Snoozed facts, not ones a test
+  /// constructed by hand (this spec's own Design Notes: any failure here is a
+  /// bug in that *existing* logic, not a reason for this story to add new
+  /// logic).
+  Future<void> recordDoseAt(
+    DoseRepository doses, {
+    required DateTime now,
+    required DateTime day,
+    required int hour,
+    required Future<void> Function(DoseRecorder recorder, Dose dose) action,
+  }) async {
+    final List<Dose> found = await doses.dosesScheduledBetween(
+      day,
+      day.add(const Duration(days: 1)),
+    );
+    final Dose dose = found.firstWhere(
+      (Dose d) => d.scheduledLocal.hour == hour,
+    );
+    final DoseRecorder recorder = DoseRecorder(
+      FixedClock(instant: now),
+      doses,
+      const NoOpDoseNotifier(),
+    );
+    await action(recorder, dose);
+  }
+
+  /// A fresh `ProviderContainer` over the same [medicines]/[doses] instances
+  /// -- standing in for "Home is remounted", exactly as the "First Medicine
+  /// just saved" group's own comment describes: `homePlanControllerProvider`
+  /// is `autoDispose`, so a real remount reruns `build()` from nothing rather
+  /// than reading a cached value that would not see the write just made.
+  ProviderContainer remount(
+    MedicineRepository medicines,
+    DoseRepository doses, {
+    DateTime? now,
+  }) {
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[
+        medicineRepositoryProvider.overrideWithValue(medicines),
+        doseRepositoryProvider.overrideWithValue(doses),
+        clockProvider.overrideWithValue(FixedClock(instant: now ?? defaultNow)),
+      ],
+    );
+    addTearDown(container.dispose);
+    return container;
+  }
 
   group('no Medicines (the spec\'s "No Medicines" row)', () {
     test(
@@ -440,6 +493,141 @@ void main() {
         plan.doses.map((HomeDoseEntry e) => e.dose.medicineName).toSet(),
         <String>{for (int i = 0; i < 5; i++) 'Medicine $i'},
       );
+    });
+  });
+
+  group('Progress after one Take (Story 2.3, the spec\'s own row)', () {
+    test('1 of 3 today\'s Doses now Taken -- dosesTaken counts the real '
+        'DoseRecorder write', () async {
+      final c = buildContainer();
+      final Medicine first = await addMedicine(c.medicines, name: 'A');
+      await addSchedule(c.medicines, first.id, timeOfDay: '08:00');
+      final Medicine second = await addMedicine(c.medicines, name: 'B');
+      await addSchedule(c.medicines, second.id, timeOfDay: '12:00');
+      final Medicine third = await addMedicine(c.medicines, name: 'C');
+      await addSchedule(c.medicines, third.id, timeOfDay: '18:00');
+
+      // Generates today's Doses -- this controller's own first read.
+      await c.container.read(homePlanControllerProvider.future);
+      await recordDoseAt(
+        c.doses,
+        now: defaultNow,
+        day: DateTime(2026, 9, 9),
+        hour: 8,
+        action: (DoseRecorder recorder, Dose dose) => recorder.take(dose),
+      );
+
+      final HomePlan plan = await remount(
+        c.medicines,
+        c.doses,
+      ).read(homePlanControllerProvider.future);
+
+      expect(plan.dosesScheduled, 3);
+      expect(plan.dosesTaken, 1);
+      expect(
+        plan.doses
+            .where((HomeDoseEntry e) => e.resolution.state == DoseState.taken)
+            .length,
+        1,
+      );
+    });
+  });
+
+  group(
+    'Next-dose chip skips acted-on Doses (Story 2.3, the spec\'s own row)',
+    () {
+      test('the nearest Dose is now Taken -- the chip advances to the next '
+          'Scheduled/Due one', () async {
+        final c = buildContainer();
+        final Medicine early = await addMedicine(c.medicines, name: 'Early');
+        await addSchedule(c.medicines, early.id, timeOfDay: '08:00');
+        final Medicine later = await addMedicine(c.medicines, name: 'Later');
+        await addSchedule(c.medicines, later.id, timeOfDay: '12:00');
+
+        await c.container.read(homePlanControllerProvider.future);
+        await recordDoseAt(
+          c.doses,
+          now: defaultNow,
+          day: DateTime(2026, 9, 9),
+          hour: 8,
+          action: (DoseRecorder recorder, Dose dose) => recorder.take(dose),
+        );
+
+        final HomePlan plan = await remount(
+          c.medicines,
+          c.doses,
+        ).read(homePlanControllerProvider.future);
+
+        expect(plan.nextDoseAt, isNotNull);
+        expect(plan.nextDoseAt!.hour, 12);
+      });
+    },
+  );
+
+  group('Every Dose acted on (Story 2.3, the spec\'s own row)', () {
+    test('the only today\'s Dose is now Taken -- falls back to tomorrow\'s '
+        'first Dose (the everyDay Schedule\'s own next occurrence)', () async {
+      final c = buildContainer();
+      final Medicine medicine = await addMedicine(c.medicines);
+      await addSchedule(c.medicines, medicine.id, timeOfDay: '08:00');
+
+      await c.container.read(homePlanControllerProvider.future);
+      await recordDoseAt(
+        c.doses,
+        now: defaultNow,
+        day: DateTime(2026, 9, 9),
+        hour: 8,
+        action: (DoseRecorder recorder, Dose dose) => recorder.take(dose),
+      );
+
+      final HomePlan plan = await remount(
+        c.medicines,
+        c.doses,
+      ).read(homePlanControllerProvider.future);
+
+      expect(plan.dosesTaken, 1);
+      expect(plan.nextDoseAt, isNotNull);
+      expect(
+        plan.nextDoseAt!.isAfter(plan.doses.single.dose.scheduledAt),
+        isTrue,
+        reason:
+            'the fallback is tomorrow\'s occurrence, not today\'s now-Taken '
+            'one',
+      );
+    });
+
+    test('the only Dose that will ever exist is now Skipped -- nextDoseAt is '
+        'null ("nothing scheduled")', () async {
+      final DateTime today = DateTime(2026, 9, 9);
+      final c = buildContainer();
+      // `startDate == endDate == today`: the everyDay Schedule below produces
+      // exactly one occurrence, ever (`dose_generator_test.dart`'s own
+      // "endDate clips the horizon" note) -- so once it is acted on, nothing
+      // remains anywhere in the visible horizon.
+      final Medicine medicine = await addMedicine(
+        c.medicines,
+        startDate: today,
+        endDate: today,
+      );
+      await addSchedule(c.medicines, medicine.id, timeOfDay: '08:00');
+
+      await c.container.read(homePlanControllerProvider.future);
+      await recordDoseAt(
+        c.doses,
+        now: defaultNow,
+        day: today,
+        hour: 8,
+        action: (DoseRecorder recorder, Dose dose) => recorder.skip(dose),
+      );
+
+      final HomePlan plan = await remount(
+        c.medicines,
+        c.doses,
+      ).read(homePlanControllerProvider.future);
+
+      expect(plan.dosesScheduled, 1);
+      expect(plan.doses.single.resolution.state, DoseState.skipped);
+      expect(plan.nextDoseAt, isNull);
     });
   });
 }

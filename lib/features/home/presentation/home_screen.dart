@@ -211,8 +211,11 @@ class _PopulatedPlan extends StatelessWidget {
           const SizedBox(height: MTSpacing.s4),
           OverdueBanner(overdueCount: plan.overdueCount),
         ],
-        // 6. The time-grouped dose list.
-        _DoseList(entries: plan.doses),
+        // 6. The time-grouped dose list. `plan.now` -- the one instant this
+        // whole plan was resolved against -- rather than a second clock read,
+        // so a Snoozed card's own "reminder in {n} min" cannot disagree with
+        // what `resolve()` itself used (Story 2.3).
+        _DoseList(entries: plan.doses, now: plan.now),
       ],
     );
   }
@@ -222,9 +225,13 @@ class _PopulatedPlan extends StatelessWidget {
 /// -- FR-12's "grouped by time in scheduled-time order", already guaranteed
 /// ascending by `HomePlanController`'s own range query.
 class _DoseList extends StatelessWidget {
-  const _DoseList({required this.entries});
+  const _DoseList({required this.entries, required this.now});
 
   final List<HomeDoseEntry> entries;
+
+  /// Threaded through to each `DoseCard` -- see `_PopulatedPlan`'s own
+  /// comment for why this is `plan.now`, not a second clock read.
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
@@ -247,7 +254,7 @@ class _DoseList extends StatelessWidget {
       }
       children
         ..add(const SizedBox(height: MTSpacing.s2))
-        ..add(DoseCard(entry: entry));
+        ..add(DoseCard(entry: entry, now: now));
 
       previousTime = time;
     }

@@ -153,4 +153,26 @@ void main() {
       expect(HomeCopy.toastSkipped, 'Marked as skipped');
     });
   });
+
+  group('the Taken/Skipped/Snoozed chips (Story 2.3)', () {
+    test('Taken folds its mark into the sentence, from the actual time', () {
+      expect(
+        HomeCopy.stateTaken(DateTime(2026, 1, 1, 8, 2)),
+        '✓ Taken at 08:02 AM',
+      );
+    });
+
+    test('Skipped is exactly the table\'s word and mark, never a harsher '
+        'one', () {
+      expect(HomeCopy.stateSkipped, '– Skipped');
+    });
+
+    test(
+      'Snoozed carries no mark -- word-only, with the fresh minute count',
+      () {
+        expect(HomeCopy.stateSnoozed(15), 'Snoozed · reminder in 15 min');
+        expect(HomeCopy.stateSnoozed(1), 'Snoozed · reminder in 1 min');
+      },
+    );
+  });
 }

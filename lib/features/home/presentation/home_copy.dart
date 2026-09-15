@@ -144,6 +144,36 @@ abstract final class HomeCopy {
   static String stateOverdue(DateTime scheduledAt) =>
       'Overdue · was due ${timeLabel(scheduledAt)}';
 
+  /// The Taken card's chip word (Story 2.3) -- `EXPERIENCE.md`'s State
+  /// Patterns table assigns Taken its `✓` mark, folded into the sentence
+  /// rather than drawn separately, matching the mock's own `✓ Taken at {{
+  /// d.at }}` shape. [actualTime] is `dose.takenAt`, never `scheduledAt` --
+  /// this card states when a dose really was recorded, not when it was due.
+  ///
+  /// `.toLocal()` first, unconditionally: `SystemClock.now()` writes
+  /// `takenAt` as a local-flavoured `DateTime`, but `DriftDoseRepository`
+  /// stores every instant field as UTC and hands one back UTC-flavoured
+  /// (`drift_dose_repository.dart`'s own `_doseFromRow`, and
+  /// `dose_recorder_test.dart`'s `sameMoment` note on exactly this) -- reading
+  /// `.hour`/`.minute` off that without converting first shows the UTC clock
+  /// reading, not the wall-clock time the user actually saw. `.toLocal()` is
+  /// a no-op on an already-local value, so this is correct for both a
+  /// freshly-recorded Dose and one just read back from storage.
+  static String stateTaken(DateTime actualTime) =>
+      '✓ Taken at ${timeLabel(actualTime.toLocal())}';
+
+  /// The Skipped card's chip word (Story 2.3) -- the table's other assigned
+  /// mark, `–`, folded the same way. Never a second, harsher word: skipping
+  /// is a legitimate choice (DESIGN.md's own Skipped note).
+  static const String stateSkipped = '– Skipped';
+
+  /// The Snoozed card's chip (Story 2.3) -- no mark: the table assigns
+  /// Scheduled/Due/Overdue/Snoozed none, so this stays word-only. [minutes]
+  /// is computed fresh by the caller on every rebuild from `now` to
+  /// `dose.snoozedUntil`, never a ticking countdown of its own.
+  static String stateSnoozed(int minutes) =>
+      'Snoozed · reminder in $minutes min';
+
   // --- Progress card ----------------------------------------------------------------
 
   /// The progress card's title -- the mock's own words, UX-DR6's "title" that
@@ -272,6 +302,9 @@ abstract final class HomeCopy {
     stateScheduled,
     stateDue,
     stateOverdue(DateTime(2026, 1, 1, 8)),
+    stateTaken(DateTime(2026, 1, 1, 8, 2)),
+    stateSkipped,
+    stateSnoozed(15),
     progressTitle,
     progressLabel(1, 3),
     nextDoseLabel,
