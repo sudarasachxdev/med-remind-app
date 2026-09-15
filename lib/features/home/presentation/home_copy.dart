@@ -194,6 +194,50 @@ abstract final class HomeCopy {
   static const String privacyFootnote =
       'Everything is stored on this phone. No account, no cloud.';
 
+  // --- Dose action sheet (UX-DR13, Story 2.2) --------------------------------------------
+
+  /// The sheet's title -- the mock's own `'Time for ' + name`.
+  static String sheetTitle(String medicineName) => 'Time for $medicineName';
+
+  /// The sheet's meta line: dose then scheduled time, the mock's own
+  /// `dose + ' · ' + time`. Built from [doseSummary]/[timeLabel] rather than
+  /// a third copy of either formatter.
+  static String sheetMeta({
+    required double amount,
+    required String unit,
+    required DateTime time,
+  }) => '${doseSummary(amount, unit)} · ${timeLabel(time)}';
+
+  /// The sheet's primary action -- fixed priority first (UX-DR13), the
+  /// mock's own label, shared with the overdue row's identical pill so the
+  /// two entry points never say two different things for the same action.
+  static const String sheetTakeAction = '✓ I took it';
+
+  /// The sheet's secondary action, spelled out with its length -- unlike the
+  /// overdue row's compact `Snooze`, which has no room for the minutes.
+  static String sheetSnoozeAction(int minutes) => 'Snooze $minutes min';
+
+  /// The sheet's least-prominent, text-only action.
+  static const String sheetSkipAction = 'Skip this dose';
+
+  // --- Toast (UX-DR14) --------------------------------------------------------------------
+
+  /// Take, on time -- the mock's own `'Recorded ' + name + ' as taken'`.
+  static String toastTaken(String medicineName) =>
+      'Recorded $medicineName as taken';
+
+  /// Take, after the window -- UX-DR19: a late record states the fact, not
+  /// an apology, so this only appends the fact to [toastTaken] rather than
+  /// composing a second sentence.
+  static String toastTakenLate(String medicineName) =>
+      '${toastTaken(medicineName)}, logged late';
+
+  /// Snooze -- the mock's own `'Snoozed ' + minutes + ' minutes'`.
+  static String toastSnoozed(int minutes) => 'Snoozed $minutes minutes';
+
+  /// Skip -- the mock's own words, verbatim.
+  static const String toastSkipped = 'Marked as skipped';
+
   // --- Empty state (UX-DR16, Story 1.9) ---------------------------------------------------
 
   /// The empty-state card's title, shown when no Medicine has been saved at
@@ -239,5 +283,13 @@ abstract final class HomeCopy {
     privacyFootnote,
     emptyStateTitle,
     emptyStateBody,
+    sheetTitle('Metformin'),
+    sheetSnoozeAction(15),
+    sheetTakeAction,
+    sheetSkipAction,
+    toastTaken('Metformin'),
+    toastTakenLate('Metformin'),
+    toastSnoozed(15),
+    toastSkipped,
   ];
 }

@@ -50,10 +50,19 @@ abstract final class MTRadius {
   /// `rounded/2xl` — the progress card and other full-width panels.
   static const double xl2 = 20;
 
-  /// `rounded/3xl` — the action sheet's top corners.
+  /// `rounded/3xl` — decorative icon tiles, such as the empty-state's.
+  ///
+  /// Corrected 2026-09-11: this doc comment claimed "the action sheet's top
+  /// corners" until Story 2.2 built the sheet from it and produced a visibly
+  /// wrong radius -- `DESIGN.md`'s own Shapes section is unambiguous that
+  /// `4xl` is "the bottom sheet's top corners **alone**" and `3xl` is "the
+  /// decorative icon tiles." A wrong doc comment on a token is exactly as
+  /// costly as a wrong value: the reader has no reason to re-measure a claim
+  /// that reads as settled.
   static const double xl3 = 26;
 
-  /// `rounded/4xl` — the largest rounded surface: a full-bleed accent panel.
+  /// `rounded/4xl` — the bottom sheet's top corners, alone. `DESIGN.md`'s own
+  /// wording: no other surface uses this step.
   static const double xl4 = 30;
 
   /// `rounded/pill` — chips, day pills, toggles and the progress ring.

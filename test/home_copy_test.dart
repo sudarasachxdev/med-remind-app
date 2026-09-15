@@ -115,4 +115,42 @@ void main() {
       expect(HomeCopy.progressLabel(1, 3), '1 of 3 doses taken');
     });
   });
+
+  group('the dose action sheet and toast (Story 2.2)', () {
+    test(
+      'the sheet composes its title and meta from the mock\'s own shape',
+      () {
+        expect(HomeCopy.sheetTitle('Metformin'), 'Time for Metformin');
+        expect(
+          HomeCopy.sheetMeta(
+            amount: 1,
+            unit: 'tablet',
+            time: DateTime(2026, 1, 1, 8, 0),
+          ),
+          '1 tablet · 08:00 AM',
+        );
+      },
+    );
+
+    test('the toast states the fact, and the late qualifier only appends '
+        'it -- never a second sentence (UX-DR19)', () {
+      expect(
+        HomeCopy.toastTaken('Candesartan'),
+        'Recorded Candesartan as taken',
+      );
+      expect(
+        HomeCopy.toastTakenLate('Candesartan'),
+        'Recorded Candesartan as taken, logged late',
+      );
+      expect(
+        HomeCopy.toastTakenLate('Candesartan'),
+        startsWith(HomeCopy.toastTaken('Candesartan')),
+      );
+    });
+
+    test('snooze and skip toasts, verbatim from the mock', () {
+      expect(HomeCopy.toastSnoozed(15), 'Snoozed 15 minutes');
+      expect(HomeCopy.toastSkipped, 'Marked as skipped');
+    });
+  });
 }

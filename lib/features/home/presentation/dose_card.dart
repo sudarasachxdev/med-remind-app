@@ -4,15 +4,24 @@
 // does not practically occur here (Home shows only today's Doses, and Missed
 // is a prior-day state).
 //
-// NOTHING ON ANY VARIANT IS WIRED TO AN ACTION. `DoseRecorder` and the action
-// sheet do not exist before Story 2.1/2.2, so the trailing circle on the plain
-// and due cards, and the three-action row the overdue card expands to inline
-// (UX-DR4), are rendered exactly as the design draws them and respond to
-// nothing -- no `onTap`, no `GestureDetector`, and each is excluded from the
-// semantics tree rather than announced as a button that does nothing. A
-// control that LOOKS actionable and silently is not would be a worse
-// accessibility failure than one that is honestly decorative. Story 2.2 wires
-// all of this for real.
+// STORY 2.2 WIRES BOTH ENTRY POINTS TO `DoseRecorder`, deliberately not the
+// same shape: the plain/due trailing control opens `DoseActionSheet`
+// (`lib/shared/widgets/`) and acts nowhere else on this card, while the
+// overdue row's three pills call `DoseRecorder` directly, with no sheet in
+// between -- EXPERIENCE.md's own explicit rule that the overdue variant is
+// "the one dose state that never requires a second tap to resolve", not an
+// inconsistency this story reconciles. Only the trailing control (plain/due)
+// and the three pills (overdue) are tappable; the rest of a card's surface
+// still does nothing, exactly as the mock's own `onClick` wiring draws it.
+//
+// A card's own `Semantics` node stays the ONE thing a screen reader
+// announces (`excludeSemantics: true`, unchanged from Epic 1); the plain/due
+// variant's node additionally carries `button: true` and the sheet-opening
+// `onTap`, since touch exploration would otherwise never reach the small
+// GestureDetector nested inside an excluded subtree. The overdue row drops
+// its `ExcludeSemantics` wrapper entirely -- its three pills are now real,
+// individually-labelled controls, not decoration silently announced as
+// nothing.
 //
 // COLOUR IS NEVER THE ONLY SIGNAL (UX-DR8, NFR-5): every variant's chip
 // carries a word, and the overdue card's left border and chip both read from
@@ -24,9 +33,15 @@
 // colour systems never mix on one card.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/dose_recorder_provider.dart';
+import '../../../domain/model/domain_failure.dart';
 import '../../../domain/model/dose_state.dart';
+import '../../../domain/policy/snooze_policy.dart';
 import '../../../shared/design/design.dart';
+import '../../../shared/widgets/dose_action_sheet.dart';
+import '../../../shared/widgets/mt_toast.dart';
 import '../application/home_plan_controller.dart';
 import 'glyph_tile.dart';
 import 'home_copy.dart';
@@ -87,6 +102,15 @@ class _PlainOrDueDoseCard extends StatelessWidget {
 
     return Semantics(
       label: _cardLabel(entry, stateWord),
+      // `button: true` and `onTap` here, not only on the trailing
+      // `GestureDetector` below: `excludeSemantics` hides that whole subtree
+      // from touch exploration, so a screen-reader user's double-tap has to
+      // land on THIS node to open the sheet at all -- the mock's own
+      // `onClick` binds only the trailing circle for a sighted pointer, but
+      // one merged label with one activation point is what UX-DR20's "one
+      // screen-reader label per card" means for an interactive card.
+      button: true,
+      onTap: () => _openSheet(context),
       // `excludeSemantics`, not `container`: this label must be the ONLY
       // semantics node the card contributes. `container` alone would still
       // let the name/meta/chip `Text` widgets below each add their own node,
@@ -163,9 +187,14 @@ class _PlainOrDueDoseCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: MTSpacing.s3),
-                  // Decorative only -- see the file comment. Story 2.2 wires
-                  // the real tap.
-                  ExcludeSemantics(child: _TrailingCircle(isDue: isDue)),
+                  // The mock's own tap target: `onClick="{{ d.open }}"` binds
+                  // only this circle, not the whole row (see the file
+                  // comment for the accessibility half of this story).
+                  GestureDetector(
+                    onTap: () => _openSheet(context),
+                    behavior: HitTestBehavior.opaque,
+                    child: _TrailingCircle(isDue: isDue),
+                  ),
                 ],
               ),
             ),
@@ -174,50 +203,88 @@ class _PlainOrDueDoseCard extends StatelessWidget {
       ),
     );
   }
+
+  /// Opens `DoseActionSheet` over [context] and, once it closes with a
+  /// composed toast (a successful action), shows it -- after the pop,
+  /// deliberately, since the sheet's own context does not survive it.
+  /// Dismissal (scrim tap or back) resolves with `null`: nothing recorded,
+  /// no toast, per this spec's own matrix.
+  Future<void> _openSheet(BuildContext context) async {
+    final String? toastMessage = await DoseActionSheet.show(
+      context,
+      dose: entry.dose,
+      glyphIndex: entry.glyphIndex,
+      condition: entry.condition,
+    );
+    if (toastMessage != null && context.mounted) {
+      showMtToast(context, toastMessage);
+    }
+  }
 }
 
 /// The overdue card: amber, no left-border colour reuse from the due card
-/// (state-late, never accent), and the three inline actions rendered as
-/// decoration only.
-class _OverdueDoseCard extends StatelessWidget {
+/// (state-late, never accent), and the three inline actions, each wired
+/// directly to `DoseRecorder` -- no sheet, per this story's own Design Notes.
+class _OverdueDoseCard extends ConsumerStatefulWidget {
   const _OverdueDoseCard({required this.entry});
 
   final HomeDoseEntry entry;
 
+  @override
+  ConsumerState<_OverdueDoseCard> createState() => _OverdueDoseCardState();
+}
+
+class _OverdueDoseCardState extends ConsumerState<_OverdueDoseCard> {
   static const double _accentBarWidth = 4;
+
+  /// Set by a refused action (this spec's "Overdue card, snooze tapped"
+  /// row): the same visible-text treatment the sheet gives a refusal, since
+  /// this card has no sheet to hold it instead. Cleared at the start of the
+  /// next attempt.
+  String? _errorMessage;
+
+  /// Guards a rapid double-tap on one of the three pills -- see
+  /// `DoseActionSheet`'s own `_busy` for why this is a plain flag rather than
+  /// a provider: ephemeral, this card's own lifetime, nothing else reads it.
+  bool _busy = false;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: _cardLabel(entry, 'Overdue'),
-      // See `_PlainOrDueDoseCard` for why this is `excludeSemantics`, not
-      // `container`.
-      excludeSemantics: true,
-      child: DecoratedBox(
-        // See `_PlainOrDueDoseCard` for why the shadow/radius and the
-        // one-sided border live on two different decorations.
-        decoration: const BoxDecoration(
-          borderRadius: BorderRadius.all(Radius.circular(MTRadius.lg)),
-          boxShadow: <BoxShadow>[MTElevation.raisedStrong],
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.all(Radius.circular(MTRadius.lg)),
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              color: MTColors.surfaceRaised,
-              border: Border(
-                left: BorderSide(
-                  width: _accentBarWidth,
-                  color: MTColors.stateLateMark,
-                ),
+    final HomeDoseEntry entry = widget.entry;
+
+    return DecoratedBox(
+      // See `_PlainOrDueDoseCard` for why the shadow/radius and the
+      // one-sided border live on two different decorations.
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.all(Radius.circular(MTRadius.lg)),
+        boxShadow: <BoxShadow>[MTElevation.raisedStrong],
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.all(Radius.circular(MTRadius.lg)),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: MTColors.surfaceRaised,
+            border: Border(
+              left: BorderSide(
+                width: _accentBarWidth,
+                color: MTColors.stateLateMark,
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(MTSpacing.s3),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Row(
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(MTSpacing.s3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // The informational half of the card stays ONE merged
+                // announcement, exactly like `_PlainOrDueDoseCard` -- but
+                // this `Semantics` wraps only THIS `Row`, not the actions
+                // below it, so the exclusion cannot also swallow their own
+                // individual button semantics (see the file comment).
+                Semantics(
+                  label: _cardLabel(entry, 'Overdue'),
+                  excludeSemantics: true,
+                  child: Row(
                     children: <Widget>[
                       ExcludeSemantics(
                         child: GlyphTile(glyphIndex: entry.glyphIndex),
@@ -257,27 +324,94 @@ class _OverdueDoseCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: MTSpacing.s3),
-                  // Visual only: DoseRecorder and the action sheet
-                  // (Story 2.2) do not exist yet. No tap handler is wired to
-                  // any of the three rows, and the whole group is excluded
-                  // from semantics rather than announced as three buttons
-                  // that do nothing.
-                  ExcludeSemantics(child: _OverdueActionsRow()),
+                ),
+                const SizedBox(height: MTSpacing.s3),
+                // No `ExcludeSemantics` here any more (Story 2.2): each pill
+                // below carries its own `Semantics(button: true, label: ...)`
+                // and is individually reachable and activatable.
+                _OverdueActionsRow(
+                  onTake: _busy ? null : _take,
+                  onSnooze: _busy ? null : _snooze,
+                  onSkip: _busy ? null : _skip,
+                ),
+                if (_errorMessage != null) ...<Widget>[
+                  const SizedBox(height: MTSpacing.s2),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      _errorMessage!,
+                      style: MTTypography.meta.copyWith(
+                        color: MTColors.inkSecondary,
+                      ),
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
+
+  Future<void> _take() => _run(
+    action: () => ref.read(doseRecorderProvider).take(widget.entry.dose),
+    toast: () => composeTakenToast(ref, widget.entry.dose),
+  );
+
+  Future<void> _snooze() => _run(
+    action: () => ref.read(doseRecorderProvider).snooze(widget.entry.dose),
+    toast: () async => HomeCopy.toastSnoozed(defaultSnoozeInterval.inMinutes),
+  );
+
+  Future<void> _skip() => _run(
+    action: () => ref.read(doseRecorderProvider).skip(widget.entry.dose),
+    toast: () async => HomeCopy.toastSkipped,
+  );
+
+  /// One action, start to finish -- the overdue row's own version of
+  /// `DoseActionSheet`'s `_run`: no sheet to pop, so a success shows the
+  /// toast directly (before invalidating the plan, while `context` is
+  /// certainly still mounted) and a refusal sets [_errorMessage] instead of
+  /// closing anything, because there is nothing here to close.
+  Future<void> _run({
+    required Future<void> Function() action,
+    required Future<String> Function() toast,
+  }) async {
+    setState(() {
+      _busy = true;
+      _errorMessage = null;
+    });
+    try {
+      await action();
+      final String message = await toast();
+      if (!mounted) return;
+      showMtToast(context, message);
+      ref.invalidate(homePlanControllerProvider);
+    } on DomainFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _errorMessage = failure.message;
+      });
+    }
+  }
 }
 
 /// The three inline actions the overdue card expands to (UX-DR4, UX-DR13's
-/// fixed priority order) -- decorative, per the file comment.
+/// fixed priority order) -- real controls (Story 2.2), each calling
+/// `DoseRecorder` directly with no sheet in between.
 class _OverdueActionsRow extends StatelessWidget {
-  const _OverdueActionsRow();
+  const _OverdueActionsRow({
+    required this.onTake,
+    required this.onSnooze,
+    required this.onSkip,
+  });
+
+  /// `null` while an action from this row is already in flight.
+  final VoidCallback? onTake;
+  final VoidCallback? onSnooze;
+  final VoidCallback? onSkip;
 
   @override
   Widget build(BuildContext context) {
@@ -289,6 +423,7 @@ class _OverdueActionsRow extends StatelessWidget {
             label: '✓ I took it',
             background: MTColors.accent,
             ink: MTColors.surfaceRaised,
+            onTap: onTake,
           ),
         ),
         const SizedBox(width: MTSpacing.s2),
@@ -297,6 +432,7 @@ class _OverdueActionsRow extends StatelessWidget {
             label: 'Snooze',
             background: MTColors.surfaceMuted,
             ink: MTColors.inkSecondary,
+            onTap: onSnooze,
           ),
         ),
         const SizedBox(width: MTSpacing.s2),
@@ -305,6 +441,7 @@ class _OverdueActionsRow extends StatelessWidget {
             label: 'Skip',
             background: MTColors.surfaceApp,
             ink: MTColors.inkFaint,
+            onTap: onSkip,
           ),
         ),
       ],
@@ -317,37 +454,52 @@ class _ActionPill extends StatelessWidget {
     required this.label,
     required this.background,
     required this.ink,
+    required this.onTap,
   });
 
   final String label;
   final Color background;
   final Color ink;
 
+  /// `null` while this action is already in flight -- inert, not merely
+  /// dimmed, matching `DoseActionSheet`'s own `_SheetAction`.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: const BorderRadius.all(Radius.circular(MTRadius.lg)),
-      ),
-      child: ConstrainedBox(
-        // UX-DR20: "the three-action overdue card is the tightest layout --
-        // it must not compress below" the 44pt/48dp floor. Nothing here is
-        // wired to a tap yet (Story 2.2), but the floor is a layout property,
-        // not a behavioural one, and this row must already hold it so wiring
-        // the action later is not also a resize.
-        constraints: const BoxConstraints(
-          minHeight: MTDimensions.touchMinAndroid,
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: MTSpacing.s2),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: MTTypography.body.copyWith(
-                color: ink,
-                fontWeight: FontWeight.w600,
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      onTap: onTap,
+      // One node per pill -- without this the label is announced twice, once
+      // here and once by the `Text` below.
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: const BorderRadius.all(Radius.circular(MTRadius.lg)),
+          ),
+          child: ConstrainedBox(
+            // UX-DR20: "the three-action overdue card is the tightest layout
+            // -- it must not compress below" the 44pt/48dp floor.
+            constraints: const BoxConstraints(
+              minHeight: MTDimensions.touchMinAndroid,
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: MTSpacing.s2),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: MTTypography.body.copyWith(
+                    color: ink,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ),
@@ -357,8 +509,9 @@ class _ActionPill extends StatelessWidget {
   }
 }
 
-/// The trailing decorative control on the plain and due cards -- an outline
-/// chevron on plain, a filled accent check on due, neither wired to anything.
+/// The trailing control on the plain and due cards -- an outline chevron on
+/// plain, a filled accent check on due. Purely visual: the tap itself is
+/// wired on the `GestureDetector` `_PlainOrDueDoseCard` wraps this in.
 class _TrailingCircle extends StatelessWidget {
   const _TrailingCircle({required this.isDue});
 

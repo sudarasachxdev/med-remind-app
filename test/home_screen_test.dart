@@ -2,17 +2,20 @@
 // widget half of this story's matrix: the fixed vertical order, the three
 // dose-card variants, and the accessibility floor UX-DR20 sets.
 //
-// Testing depth is LIGHTER (project-context.md), with the standing exception
-// this spec itself names: "this is the first real screen reading live-
-// generated data, and home_screen_test.dart is not optional." Pumped as a
-// bare `HomeScreen` under its own `ProviderScope`/`MaterialApp`, not the whole
-// `MediTrackerApp`: nothing here navigates (Story 2.2 owns the action sheet,
-// and the day strip does not select yet -- Story 4.4), so there is no router
-// to exercise -- EXCEPT the empty state's own "Add medicine" action (Story
-// 1.9), which is the one control on this screen that does navigate. Its own
-// group below pumps a second, minimal harness -- `pumpHomeWithRouter` -- that
-// carries a real `GoRouter` over the same two routes `app/router.dart`
-// registers, rather than promoting every test in this file to the full
+// Testing depth is LIGHTER (project-context.md), with two standing
+// exceptions: "this is the first real screen reading live-generated data,
+// and home_screen_test.dart is not optional" (Story 1.8/1.9), and Story
+// 2.2's own "standard, not lighter" for the write side this file's own "two
+// entry points to DoseRecorder" group covers. Pumped as a bare `HomeScreen`
+// under its own `ProviderScope`/`MaterialApp`, not the whole
+// `MediTrackerApp`: the action sheet is a plain `Navigator` route
+// (`showModalBottomSheet`), not a `go_router` one, and the day strip does
+// not select yet (Story 4.4), so there is still no ROUTER to exercise here
+// -- EXCEPT the empty state's own "Add medicine" action (Story 1.9), which
+// is the one control on this screen that does navigate. Its own group below
+// pumps a second, minimal harness -- `pumpHomeWithRouter` -- that carries a
+// real `GoRouter` over the same two routes `app/router.dart` registers,
+// rather than promoting every test in this file to the full
 // `MediTrackerApp`.
 
 import 'package:drift/native.dart';
@@ -28,6 +31,7 @@ import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
@@ -42,6 +46,7 @@ import 'package:med_remind_app/features/home/presentation/home_screen.dart';
 import 'package:med_remind_app/features/home/presentation/overdue_banner.dart';
 import 'package:med_remind_app/features/home/presentation/progress_card.dart';
 import 'package:med_remind_app/features/home/presentation/week_strip.dart';
+import 'package:med_remind_app/shared/widgets/mt_toast.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
 import 'support/fixed_clock.dart';
@@ -408,6 +413,161 @@ void main() {
     });
   });
 
+  group('the two entry points to DoseRecorder (Story 2.2)', () {
+    testWidgets(
+      'a plain/due card\'s trailing control opens the sheet -- it does not '
+      'act directly, and nothing is recorded until an action inside it is '
+      'tapped',
+      (tester) async {
+        await pumpHome(
+          tester,
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+
+        await tester.tap(find.byIcon(Icons.check));
+        await tester.pumpAndSettle();
+
+        expect(find.text(HomeCopy.sheetTitle('Metformin')), findsOneWidget);
+        expect(find.text(HomeCopy.sheetTakeAction), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a successful action taken from the sheet is also reflected on Home '
+      'with no manual refresh',
+      (tester) async {
+        await pumpHome(
+          tester,
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+        expect(find.text(HomeCopy.stateDue), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.check));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(HomeCopy.sheetTakeAction));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(HomeCopy.stateDue),
+          findsNothing,
+          reason:
+              'the taken dose no longer resolves Due, with no manual '
+              'refresh needed to see it',
+        );
+
+        // Flushes the toast's own auto-dismiss `Timer`.
+        await tester.pump(mtToastDuration);
+      },
+    );
+
+    testWidgets(
+      'the overdue row\'s "I took it" calls DoseRecorder.take directly -- '
+      'no sheet opens, and the toast matches the sheet path\'s own wording',
+      (tester) async {
+        final result = await pumpHomeWithRouter(
+          tester,
+          now: DateTime(2026, 9, 9, 14, 0),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+          },
+        );
+
+        await tester.tap(find.text('✓ I took it'));
+        await tester.pump();
+
+        expect(
+          find.text(HomeCopy.sheetTitle('Metformin')),
+          findsNothing,
+          reason: 'the overdue row never opens the sheet',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Recorded Metformin as taken'),
+          findsOneWidget,
+        );
+
+        final Dose taken = (await result.doses.dosesScheduledBetween(
+          DateTime(2026, 9, 9),
+          DateTime(2026, 9, 10),
+        )).single;
+        expect(taken.takenAt, isNotNull);
+
+        // Flushes the toast's own auto-dismiss `Timer` (`mtToastDuration`)
+        // before the test ends -- `flutter_test` fails a test that leaves a
+        // real `Timer` pending, and this one is not otherwise awaited.
+        await tester.pump(mtToastDuration);
+      },
+    );
+
+    testWidgets('the overdue row\'s "Snooze" is refused, with the same visible '
+        'failure text the sheet path would show -- nothing recorded', (
+      tester,
+    ) async {
+      await pumpHome(
+        tester,
+        now: DateTime(2026, 9, 9, 14, 0),
+        seed: (medicines) async {
+          final Medicine medicine = await addMedicine(medicines);
+          await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+        },
+      );
+
+      await tester.tap(find.text('Snooze'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This dose is too close to its overdue time to snooze.'),
+        findsOneWidget,
+      );
+      expect(find.byType(DoseCard), findsOneWidget);
+      expect(
+        find.textContaining('Overdue · was due'),
+        findsOneWidget,
+        reason: 'still Overdue -- the refusal changed nothing',
+      );
+    });
+
+    testWidgets(
+      'a successful action from the overdue row is reflected on Home with '
+      'no manual refresh',
+      (tester) async {
+        await pumpHome(
+          tester,
+          now: DateTime(2026, 9, 9, 14, 0),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+          },
+        );
+        expect(find.text(HomeCopy.progressLabel(0, 1)), findsOneWidget);
+
+        await tester.tap(find.text('Skip'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Overdue · was due'),
+          findsNothing,
+          reason: 'the skipped dose no longer resolves Overdue',
+        );
+        expect(
+          find.byType(OverdueBanner),
+          findsNothing,
+          reason: 'overdueCount dropped to 0 with no manual refresh',
+        );
+
+        // See the "I took it" test above for why this flush is here.
+        await tester.pump(mtToastDuration);
+      },
+    );
+  });
+
   group('accessibility (UX-DR20)', () {
     testWidgets('each dose card announces medicine, dose, time and state as '
         'one label', (tester) async {
@@ -467,42 +627,47 @@ void main() {
       });
     });
 
-    testWidgets('the overdue row\'s decorative actions clear the 44/48pt '
-        'floor', (tester) async {
-      await pumpHome(
-        tester,
-        now: DateTime(2026, 9, 9, 14, 0),
-        seed: (medicines) async {
-          final Medicine medicine = await addMedicine(medicines);
-          await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
-        },
-      );
+    testWidgets('the overdue row\'s three real actions clear the 44/48pt '
+        'floor and are individually reachable (Story 2.2)', (tester) async {
+      await _withSemantics(tester, () async {
+        await pumpHome(
+          tester,
+          now: DateTime(2026, 9, 9, 14, 0),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+          },
+        );
 
-      for (final String label in <String>['✓ I took it', 'Snooze', 'Skip']) {
-        // The floor is enforced on the pill's own `ConstrainedBox`, not on
-        // the bare `Text` inside it -- a short label's glyph run is shorter
-        // than the pill's own minimum height, so measuring the text directly
-        // would be measuring the wrong box.
-        final Size size = tester.getSize(
-          find
-              .ancestor(
-                of: find.text(label),
-                matching: find.byWidgetPredicate(
-                  (Widget w) =>
-                      w is ConstrainedBox && w.constraints.minHeight >= 44,
-                ),
-              )
-              .first,
-        );
-        expect(
-          size.height,
-          greaterThanOrEqualTo(kMinInteractiveDimension),
-          reason:
-              '"$label"\'s pill is ${size.height}pt tall; UX-DR20 names this '
-              'row the tightest case and the floor applies before Story 2.2 '
-              'wires the tap, not after',
-        );
-      }
+        for (final String label in <String>['✓ I took it', 'Snooze', 'Skip']) {
+          // The floor is enforced on the pill's own `ConstrainedBox`, not on
+          // the bare `Text` inside it -- a short label's glyph run is
+          // shorter than the pill's own minimum height, so measuring the
+          // text directly would be measuring the wrong box.
+          final Size size = tester.getSize(
+            find
+                .ancestor(
+                  of: find.text(label),
+                  matching: find.byWidgetPredicate(
+                    (Widget w) =>
+                        w is ConstrainedBox && w.constraints.minHeight >= 44,
+                  ),
+                )
+                .first,
+          );
+          expect(
+            size.height,
+            greaterThanOrEqualTo(kMinInteractiveDimension),
+            reason:
+                '"$label"\'s pill is ${size.height}pt tall; UX-DR20 names '
+                'this row the tightest case',
+          );
+          // Story 2.2: each pill is now a real, individually-labelled
+          // control -- no longer swallowed by one merged `excludeSemantics`
+          // node the way the card's own name/meta/chip still are.
+          expect(find.bySemanticsLabel(label), findsOneWidget);
+        }
+      });
     });
   });
 
