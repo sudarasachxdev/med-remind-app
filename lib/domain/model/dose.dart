@@ -213,6 +213,46 @@ final class Dose {
     );
   }
 
+  /// A copy with the given field replaced -- the only way any of the four
+  /// fields `DoseRecorder` owns may be changed on an existing Dose (AD-4).
+  ///
+  /// Deliberately narrower than `Medicine.copyWith`/`Schedule.copyWith`: those
+  /// two let a caller replace any editable field, because a Medicine or a
+  /// Schedule really can be edited freely. A Dose cannot -- [medicineName],
+  /// [dosageAmount], [dosageUnit] and [form] are frozen once acted on and
+  /// refreshed only by `DoseGenerator`'s own reconstruction (AD-11), never by
+  /// this method, so this signature does not offer them at all.
+  ///
+  /// Nullable fields cannot be cleared through this method -- `null` means
+  /// "not supplied", matching `Medicine.copyWith`'s own rule -- which is never
+  /// a problem here: `DoseRecorder` only ever moves [takenAt], [skippedAt] or
+  /// [snoozedUntil] forward, never back to `null`.
+  ///
+  /// This method enforces nothing itself; `test/architecture_test.dart`'s AD-4
+  /// rule is what actually restricts which file may call it with one of these
+  /// four arguments set.
+  Dose copyWith({
+    DateTime? takenAt,
+    DateTime? skippedAt,
+    DateTime? snoozedUntil,
+    int? snoozeCount,
+  }) => Dose(
+    scheduleId: scheduleId,
+    medicineId: medicineId,
+    scheduledLocal: scheduledLocal,
+    ianaTimezone: ianaTimezone,
+    takenAt: takenAt ?? this.takenAt,
+    skippedAt: skippedAt ?? this.skippedAt,
+    snoozedUntil: snoozedUntil ?? this.snoozedUntil,
+    snoozeCount: snoozeCount ?? this.snoozeCount,
+    escalationWindowMinutes: escalationWindowMinutes,
+    followUpOffsetsMinutes: followUpOffsetsMinutes,
+    medicineName: medicineName,
+    dosageAmount: dosageAmount,
+    dosageUnit: dosageUnit,
+    form: form,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is Dose &&

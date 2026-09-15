@@ -139,6 +139,54 @@ const _ambientClockTypes = {'DateTime', 'TZDateTime'};
 /// Members of those types that read the ambient clock (AD-5).
 const _ambientClockMembers = {'now', 'timestamp'};
 
+/// `lib/domain/service/dose_recorder.dart` -- the one file AD-4 permits to
+/// write any of the four fields it owns.
+const String _doseRecorderPath = 'lib/domain/service/dose_recorder.dart';
+
+/// `lib/domain/model/dose.dart` -- `Dose.copyWith`'s own home. A `copyWith`
+/// necessarily restates every field of its class inside its own body
+/// (`takenAt: takenAt ?? this.takenAt`, unconditionally, whichever argument
+/// the caller actually supplied), so the class that owns these four fields
+/// must be allowed to name them too, or its own copy method could not exist.
+/// AD-4 restricts who may call `copyWith` with one of these arguments set,
+/// not whether the method may be declared at all.
+const String _doseModelPath = 'lib/domain/model/dose.dart';
+
+/// `lib/data/repository/drift_dose_repository.dart` -- reconstructs every
+/// column of a stored row, these four included, the moment any Dose is read
+/// back (`_doseFromRow`). That is the serialization boundary the spine's own
+/// convention gives a Drift adapter, not a second place a user action is
+/// recorded.
+const String _doseRowMapperPath =
+    'lib/data/repository/drift_dose_repository.dart';
+
+/// `lib/domain/service/dose_generator.dart` -- carries an existing
+/// `snoozeCount` forward when it upserts a regenerated Dose
+/// (`existing?.snoozeCount ?? 0`, Story 1.7b, predating this rule): reading a
+/// stored count back onto the same Dose, not recording a new snooze. It never
+/// needs, and is not given, the other three fields.
+const String _doseGeneratorPath = 'lib/domain/service/dose_generator.dart';
+
+/// The one new permanent rule this story adds alongside AD-1 and AD-5 (this
+/// story's Code Map): a `Dose(...)` or `.copyWith(...)` call naming one of
+/// these four keys is a violation everywhere except the files listed for that
+/// key -- `DoseRecorder` is the only caller permitted to RECORD taking,
+/// skipping or snoozing a Dose (AD-4). See [_doseRecorderPath],
+/// [_doseModelPath], [_doseRowMapperPath] and [_doseGeneratorPath] above for
+/// why each of the non-`DoseRecorder` exceptions is not a second place an
+/// action is recorded.
+const Map<String, Set<String>> _doseWriteAllowlist = <String, Set<String>>{
+  'takenAt': {_doseRecorderPath, _doseModelPath, _doseRowMapperPath},
+  'skippedAt': {_doseRecorderPath, _doseModelPath, _doseRowMapperPath},
+  'snoozedUntil': {_doseRecorderPath, _doseModelPath, _doseRowMapperPath},
+  'snoozeCount': {
+    _doseRecorderPath,
+    _doseModelPath,
+    _doseRowMapperPath,
+    _doseGeneratorPath,
+  },
+};
+
 /// Suffixes of generated sources, which are excluded from the walk.
 ///
 /// From Story 1.4 `drift_dev` writes `lib/data/db/*.g.dart`. A violation in
@@ -358,6 +406,17 @@ List<String> architectureViolationsForSource({
       ),
     );
   }
+
+  // AD-4: no directory exclusion here -- the allowlist is per-file (see
+  // _doseWriteAllowlist), not per-directory, so the visitor itself decides
+  // exemption for every file, including its own allowed ones.
+  unit.accept(
+    _DoseRecorderFieldVisitor(
+      relativePath: relativePath,
+      lineInfo: result.lineInfo,
+      violations: violations,
+    ),
+  );
 
   if (!_isUnder(relativePath, _designTokenDirectory)) {
     unit.accept(
@@ -679,6 +738,119 @@ void main() {
           path: 'lib/features/home/home_page.dart',
         ).single,
         contains('AD-5'),
+      );
+    });
+  });
+
+  group('AD-4 — only DoseRecorder writes the fields it owns', () {
+    List<String> check(
+      String body, {
+      String path = 'lib/features/home/home_page.dart',
+    }) => architectureViolationsForSource(
+      relativePath: path,
+      source: 'Widget f() {\n$body\n}',
+    );
+
+    test('a Dose(...) call naming a recorder-owned field is a violation', () {
+      for (final String field in _doseWriteAllowlist.keys) {
+        final violations = check('final d = Dose($field: x);');
+        expect(violations, hasLength(1), reason: '$field should be flagged');
+        expect(violations.single, contains(field));
+        expect(violations.single, contains('AD-4'));
+      }
+    });
+
+    test('the same field named in a .copyWith(...) call is caught too', () {
+      for (final String field in _doseWriteAllowlist.keys) {
+        expect(
+          check('final d = dose.copyWith($field: x);'),
+          hasLength(1),
+          reason: '$field should be flagged',
+        );
+      }
+    });
+
+    test('the explicit new-constructor form is caught too', () {
+      expect(
+        check('final d = new Dose(takenAt: x);'),
+        hasLength(1),
+        reason:
+            'a NamedArgument looks the same inside new Dose(...) as inside '
+            'the bare call',
+      );
+    });
+
+    test('dose_recorder.dart may name all four fields', () {
+      for (final String field in _doseWriteAllowlist.keys) {
+        expect(
+          check('final d = Dose($field: x);', path: _doseRecorderPath),
+          isEmpty,
+          reason: '$field should be allowed in $_doseRecorderPath',
+        );
+      }
+    });
+
+    test('dose.dart may name all four fields -- copyWith must restate its own '
+        "class's fields regardless of which one the caller changed", () {
+      for (final String field in _doseWriteAllowlist.keys) {
+        expect(
+          check('final d = Dose($field: x);', path: _doseModelPath),
+          isEmpty,
+          reason: '$field should be allowed in $_doseModelPath',
+        );
+      }
+    });
+
+    test('drift_dose_repository.dart may name all four fields -- it '
+        'reconstructs a stored row, not a new action', () {
+      for (final String field in _doseWriteAllowlist.keys) {
+        expect(
+          check('final d = Dose($field: x);', path: _doseRowMapperPath),
+          isEmpty,
+          reason: '$field should be allowed in $_doseRowMapperPath',
+        );
+      }
+    });
+
+    test('dose_generator.dart may carry snoozeCount forward, but may not name '
+        'the other three', () {
+      expect(
+        check('final d = Dose(snoozeCount: x);', path: _doseGeneratorPath),
+        isEmpty,
+      );
+
+      for (final String field in ['takenAt', 'skippedAt', 'snoozedUntil']) {
+        expect(
+          check('final d = Dose($field: x);', path: _doseGeneratorPath),
+          hasLength(1),
+          reason:
+              '$field should still be refused in $_doseGeneratorPath -- '
+              'only snoozeCount is carried forward there',
+        );
+      }
+    });
+
+    test('an unrelated named argument is not flagged', () {
+      expect(check('final d = Dose(medicineName: x);'), isEmpty);
+      expect(check('final m = Medicine(name: x);'), isEmpty);
+    });
+
+    test('every occurrence in one file is reported, not just the first', () {
+      expect(
+        check(
+          'final a = Dose(takenAt: x);\n'
+          'final b = Dose(skippedAt: y);\n'
+          'final c = dose.copyWith(snoozeCount: z);',
+        ),
+        hasLength(3),
+      );
+    });
+
+    test('the rule applies to lib/app/ too, matching this story\'s own '
+        'acceptance criterion', () {
+      expect(
+        check('final d = Dose(takenAt: x);', path: 'lib/app/x.dart'),
+        hasLength(1),
       );
     });
   });
@@ -1646,6 +1818,48 @@ class _AmbientClockVisitor extends RecursiveAstVisitor<void> {
       '— AD-5: the ambient clock is read only in lib/platform/clock/; '
       'everything else takes a Clock port',
     );
+  }
+}
+
+/// AD-4: flags a `Dose(...)` or `.copyWith(...)` call naming a field
+/// [_doseWriteAllowlist] restricts, outside the file(s) that key allows.
+///
+/// Matched by argument name alone, the same trade-off
+/// `_LiteralMetricVisitor`'s `_metricNamedArguments` check already makes for
+/// `fontSize:`: an unresolved AST cannot confirm a `.copyWith(...)` call is
+/// `Dose.copyWith` rather than, say, `Medicine.copyWith`, but nothing else in
+/// this codebase declares a `takenAt`, `skippedAt`, `snoozedUntil` or
+/// `snoozeCount` parameter, so the name alone is precise enough. This also
+/// means the call's own shape -- `Dose(...)`, `new Dose(...)`,
+/// `dose.copyWith(...)` -- never needs distinguishing: a `NamedArgument` looks
+/// identical inside any of them, so unlike the ambient-clock and colour rules
+/// above, one visitor method covers every form without the usual four-node-
+/// kind split.
+class _DoseRecorderFieldVisitor extends RecursiveAstVisitor<void> {
+  _DoseRecorderFieldVisitor({
+    required this.relativePath,
+    required this.lineInfo,
+    required this.violations,
+  });
+
+  final String relativePath;
+  final LineInfo lineInfo;
+  final List<String> violations;
+
+  @override
+  void visitNamedArgument(NamedArgument node) {
+    final String name = node.name.lexeme;
+    final Set<String>? allowed = _doseWriteAllowlist[name];
+    if (allowed != null && !allowed.contains(relativePath)) {
+      final location = lineInfo.getLocation(node.offset);
+      violations.add(
+        '$relativePath:${location.lineNumber}:${location.columnNumber} '
+        'names $name: '
+        '— AD-4: only DoseRecorder ($_doseRecorderPath) may construct a Dose '
+        'with takenAt, skippedAt, snoozedUntil or snoozeCount set',
+      );
+    }
+    super.visitNamedArgument(node);
   }
 }
 
