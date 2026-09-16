@@ -133,31 +133,20 @@ const Map<String, String> _directoriesThisStoryDoesNotOwn = <String, String>{
 /// entry, not by deleting the mechanism, so the next port with no caller yet
 /// has somewhere to be listed.
 ///
-/// Story 3.1a is that next port: `PermissionGateway` has no caller yet either
-/// (Story 3.1b is its first), and this time the absence spans two
-/// directories -- `lib/app/`, where every provider in this project lives, and
-/// `lib/features/`, the Boundaries' own second name for "no caller". Each
-/// entry carries its own identifier list rather than sharing one: `lib/app/`
-/// already legitimately names `DoseRepository` and `DoseGenerator` (Story
-/// 1.8), so reusing that old shared list here would fail on wiring this file
-/// already approved.
+/// Story 3.1a was that next port: `PermissionGateway` had no caller yet
+/// (Story 3.1b was its first), and the absence spanned two directories --
+/// `lib/app/`, where every provider in this project lives, and
+/// `lib/features/`, the Boundaries' own second name for "no caller".
+///
+/// Retired empty by Story 3.1b, which is `PermissionGateway`'s first caller
+/// from both: `lib/app/permission_gateway_provider.dart` binds it, and
+/// `lib/features/onboarding/presentation/onboarding_screen.dart` and
+/// `lib/features/home/application/home_plan_controller.dart` read it. Kept as
+/// an empty map, the same house rule the file comment states: a guard is
+/// retired by deleting its entry, not by deleting the mechanism, so the next
+/// port with no caller yet has somewhere to be listed.
 const Map<String, ({List<String> identifiers, String reason})> _providerHomes =
-    <String, ({List<String> identifiers, String reason})>{
-      'lib/app': (
-        identifiers: <String>['PermissionGateway'],
-        reason:
-            'Story 3.1a builds PermissionGateway with no caller yet -- Story '
-            '3.1b is its first. A binding here would be that story landing '
-            'early.',
-      ),
-      'lib/features': (
-        identifiers: <String>['PermissionGateway'],
-        reason:
-            'Story 3.1a builds PermissionGateway with no caller yet -- Story '
-            '3.1b is its first. A caller here would be that story landing '
-            'early.',
-      ),
-    };
+    <String, ({List<String> identifiers, String reason})>{};
 
 /// Identifiers that must not appear in a domain model file, by file.
 ///
@@ -316,11 +305,14 @@ void main() {
     // still protects something. Second -- the loop below -- that whatever
     // `_providerHomes` currently forbids is really absent from the directory
     // it names. It ran zero times from Story 1.8 to Story 3.1a, which is when
-    // `PermissionGateway` refilled it with its own still-open absence.
+    // `PermissionGateway` refilled it with its own still-open absence, and it
+    // is empty again from Story 3.1b, which is that absence's own first
+    // caller.
     for (final String path in <String>[
       'lib/app/medicine_repository_provider.dart',
       'lib/app/dose_repository_provider.dart',
       'lib/app/dose_generator_provider.dart',
+      'lib/app/permission_gateway_provider.dart',
     ]) {
       expect(
         File(path).existsSync(),

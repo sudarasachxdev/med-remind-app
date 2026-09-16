@@ -27,6 +27,7 @@ import 'package:go_router/go_router.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
+import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
@@ -37,6 +38,7 @@ import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/policy/snooze_policy.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
+import 'package:med_remind_app/domain/port/permission_gateway.dart';
 import 'package:med_remind_app/features/add_medicine/domain/add_medicine_draft.dart';
 import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_copy.dart';
 import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_screen.dart';
@@ -45,11 +47,13 @@ import 'package:med_remind_app/features/home/presentation/home_copy.dart';
 import 'package:med_remind_app/features/home/presentation/home_empty_state.dart';
 import 'package:med_remind_app/features/home/presentation/home_screen.dart';
 import 'package:med_remind_app/features/home/presentation/overdue_banner.dart';
+import 'package:med_remind_app/features/home/presentation/permission_banner.dart';
 import 'package:med_remind_app/features/home/presentation/progress_card.dart';
 import 'package:med_remind_app/features/home/presentation/week_strip.dart';
 import 'package:med_remind_app/shared/widgets/mt_toast.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
+import 'support/fake_permission_gateway.dart';
 import 'support/fixed_clock.dart';
 
 /// The design's reference device frame: 402 x 874 logical pixels (iOS).
@@ -96,6 +100,7 @@ void main() {
     DateTime? now,
     double? textScale,
     Size viewport = _referenceFrame,
+    PermissionGateway? permissionGateway,
   }) async {
     tester.view.physicalSize = viewport * 3;
     tester.view.devicePixelRatio = 3;
@@ -121,6 +126,13 @@ void main() {
           clockProvider.overrideWithValue(
             FixedClock(instant: now ?? defaultNow),
           ),
+          // Granted by default -- Story 3.1b's own group below is the one
+          // that overrides this to prove the banner's own matrix rows; every
+          // test written before that story keeps asserting a screen with no
+          // banner in it.
+          permissionGatewayProvider.overrideWithValue(
+            permissionGateway ?? FakePermissionGateway(),
+          ),
         ],
         child: const MaterialApp(home: HomeScreen()),
       ),
@@ -143,6 +155,7 @@ void main() {
     required Future<void> Function(MedicineRepository medicines) seed,
     DateTime? now,
     Size viewport = _referenceFrame,
+    PermissionGateway? permissionGateway,
   }) async {
     tester.view.physicalSize = viewport * 3;
     tester.view.devicePixelRatio = 3;
@@ -179,6 +192,9 @@ void main() {
           doseRepositoryProvider.overrideWithValue(doses),
           clockProvider.overrideWithValue(
             FixedClock(instant: now ?? defaultNow),
+          ),
+          permissionGatewayProvider.overrideWithValue(
+            permissionGateway ?? FakePermissionGateway(),
           ),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -379,6 +395,211 @@ void main() {
 
       expect(find.byType(OverdueBanner), findsNothing);
     });
+  });
+
+  group('the notification-permission banner (Story 3.1b, this spec\'s own '
+      'matrix)', () {
+    testWidgets(
+      'permission denied -- the banner shows, above the overdue banner',
+      (tester) async {
+        await pumpHome(
+          tester,
+          now: DateTime(2026, 9, 9, 14, 0),
+          permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            // 6h window: Due until 13:00, Overdue at 14:00 (the pumped
+            // `now`) -- so both conditional banners are on screen together.
+            await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+          },
+        );
+
+        expect(find.byType(PermissionBanner), findsOneWidget);
+        expect(find.text(HomeCopy.permissionBannerTitle), findsOneWidget);
+
+        final double progressY = tester
+            .getTopLeft(find.byType(ProgressCard))
+            .dy;
+        final double permissionY = tester
+            .getTopLeft(find.byType(PermissionBanner))
+            .dy;
+        final double overdueY = tester
+            .getTopLeft(find.byType(OverdueBanner))
+            .dy;
+
+        expect(
+          progressY,
+          lessThan(permissionY),
+          reason: 'UX-DR23: between the progress card and the overdue banner',
+        );
+        expect(permissionY, lessThan(overdueY));
+      },
+    );
+
+    testWidgets('permission granted -- the banner is absent entirely, not '
+        'merely hidden', (tester) async {
+      await pumpHome(
+        tester,
+        permissionGateway: FakePermissionGateway(notificationsEnabled: true),
+        seed: (medicines) async {
+          final Medicine medicine = await addMedicine(medicines);
+          await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+        },
+      );
+
+      expect(find.byType(PermissionBanner), findsNothing);
+    });
+
+    testWidgets(
+      'revoked mid-session -- the banner appears on the next Home build, '
+      'with no restart',
+      (tester) async {
+        final gateway = FakePermissionGateway(notificationsEnabled: true);
+        final result = await pumpHomeWithRouter(
+          tester,
+          permissionGateway: gateway,
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+        expect(find.byType(PermissionBanner), findsNothing);
+
+        // "Denied via OS Settings, user returns to app": the same running
+        // gateway instance now answers false, and a genuine location change
+        // -- away from Home and back -- tears down and rebuilds
+        // `homePlanControllerProvider` (`autoDispose`), exactly as this
+        // file's own "once a Medicine is saved" test already does for a
+        // Medicine write.
+        gateway.notificationsEnabled = false;
+        result.router.go(MTRoutes.addMedicinePath);
+        await tester.pumpAndSettle();
+        result.router.go(MTRoutes.homePath);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PermissionBanner), findsOneWidget);
+      },
+    );
+
+    testWidgets('dismissing hides the banner for this session', (tester) async {
+      await pumpHome(
+        tester,
+        permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+        seed: (medicines) async {
+          final Medicine medicine = await addMedicine(medicines);
+          await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+        },
+      );
+      expect(find.byType(PermissionBanner), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      // Not `find.byType(PermissionBanner)`: that widget is the `State`
+      // holder for the dismiss flag itself, so it stays mounted (rendering
+      // nothing) exactly as `AnimatedSwitcher`'s own outgoing child would --
+      // the banner's own visible content is what "hides" means here.
+      expect(find.text(HomeCopy.permissionBannerTitle), findsNothing);
+      expect(find.byIcon(Icons.notifications_off), findsNothing);
+    });
+
+    testWidgets(
+      'relaunching after a dismissal shows it again -- the dismissal did '
+      'not persist',
+      (tester) async {
+        await pumpHome(
+          tester,
+          permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pumpAndSettle();
+        expect(find.text(HomeCopy.permissionBannerTitle), findsNothing);
+
+        // A relaunch: the whole tree is torn down and a fresh one pumped,
+        // exactly as `onboarding_screen_test.dart`'s own "killed on panel 2"
+        // test models it -- re-pumping over the same element would reuse the
+        // `PermissionBanner`'s own `State` and its dismissal with it.
+        await tester.pumpWidget(const SizedBox.shrink());
+        await pumpHome(
+          tester,
+          permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+
+        expect(
+          find.byType(PermissionBanner),
+          findsOneWidget,
+          reason:
+              'permission is still denied, and dismissal is in-memory '
+              'only (this story\'s own Boundaries)',
+        );
+      },
+    );
+
+    testWidgets('tapping the settings route calls '
+        'openAppNotificationSettings', (tester) async {
+      final gateway = FakePermissionGateway(notificationsEnabled: false);
+      await pumpHome(
+        tester,
+        permissionGateway: gateway,
+        seed: (medicines) async {
+          final Medicine medicine = await addMedicine(medicines);
+          await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+        },
+      );
+
+      await tester.tap(find.text(HomeCopy.permissionBannerSettingsAction));
+      await tester.pumpAndSettle();
+
+      expect(gateway.openAppNotificationSettingsCalls, 1);
+    });
+
+    testWidgets(
+      'permission denied -- adding a medicine and recording a dose both '
+      'succeed exactly as with permission granted (FR-6, NFR-3)',
+      (tester) async {
+        final result = await pumpHomeWithRouter(
+          tester,
+          permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+        expect(find.byType(PermissionBanner), findsOneWidget);
+
+        // Record the seeded Dose -- the same sheet path every other test in
+        // this file uses, proving the denial does not touch it.
+        await tester.tap(find.byIcon(Icons.check));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(HomeCopy.sheetTakeAction));
+        await tester.pumpAndSettle();
+
+        expect(find.text(HomeCopy.progressLabel(1, 1)), findsOneWidget);
+        final Dose taken = (await result.doses.dosesScheduledBetween(
+          DateTime(2026, 9, 9),
+          DateTime(2026, 9, 10),
+        )).single;
+        expect(taken.takenAt, isNotNull);
+
+        // Add a second Medicine through the real route -- the empty state's
+        // own entry point is Story 1.9's, exercised here only to prove it
+        // still opens under denial.
+        result.router.go(MTRoutes.addMedicinePath);
+        await tester.pumpAndSettle();
+        expect(find.byType(AddMedicineScreen), findsOneWidget);
+
+        // Flushes the toast's own auto-dismiss `Timer`.
+        await tester.pump(mtToastDuration);
+      },
+    );
   });
 
   group('the three dose-card variants', () {
@@ -748,6 +969,48 @@ void main() {
         expect(progressY, lessThan(doseCardY));
       });
     });
+
+    testWidgets(
+      'the permission banner sits in focus order between the progress card '
+      'and the overdue banner, and its two controls are individually '
+      'reachable (EXPERIENCE.md\'s amended focus-traversal line)',
+      (tester) async {
+        await _withSemantics(tester, () async {
+          await pumpHome(
+            tester,
+            now: DateTime(2026, 9, 9, 14, 0),
+            permissionGateway: FakePermissionGateway(
+              notificationsEnabled: false,
+            ),
+            seed: (medicines) async {
+              final Medicine medicine = await addMedicine(medicines);
+              await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+            },
+          );
+
+          final double progressY = tester
+              .getTopLeft(find.byType(ProgressCard))
+              .dy;
+          final double permissionY = tester
+              .getTopLeft(find.byType(PermissionBanner))
+              .dy;
+          final double overdueY = tester
+              .getTopLeft(find.byType(OverdueBanner))
+              .dy;
+          expect(progressY, lessThan(permissionY));
+          expect(permissionY, lessThan(overdueY));
+
+          expect(
+            find.bySemanticsLabel(HomeCopy.permissionBannerSettingsAction),
+            findsOneWidget,
+          );
+          expect(
+            find.bySemanticsLabel(HomeCopy.permissionBannerDismiss),
+            findsOneWidget,
+          );
+        });
+      },
+    );
 
     testWidgets('the overdue row\'s three real actions clear the 44/48pt '
         'floor and are individually reachable (Story 2.2)', (tester) async {

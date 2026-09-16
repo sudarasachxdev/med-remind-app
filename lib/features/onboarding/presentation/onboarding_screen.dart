@@ -12,16 +12,21 @@
 // have made that row impossible to satisfy without fighting the navigator, and
 // would have let a future deep link open panel 3 on its own.
 //
-// NOTHING HERE ASKS THE OS FOR ANYTHING. Panel 3 explains why notifications are
-// wanted and states that declining is fine; both of its actions go to Home.
-// Story 3.1 gives "Allow notifications" its real behaviour, when there are
-// notifications to permit. There is no permission plugin imported anywhere in
-// this feature, which is the only durable form of that promise.
+// PANEL 3'S TWO ACTIONS DIVERGE, AS OF STORY 3.1B. Panel 3 explains why
+// notifications are wanted and states that declining is fine; both actions
+// still reach Home, but "Allow notifications" now asks first --
+// `PermissionGateway.requestNotificationsPermission()`, never a raw plugin
+// import in this feature (AD-17's single authority stays
+// `lib/platform/permissions/`). "Not now" requests nothing: declining still
+// routes to the same Home, where the permission banner shows anyway, because
+// "never asked" and "explicitly denied" both read as
+// `areNotificationsEnabled() == false` (this story's own Boundaries).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/permission_gateway_provider.dart';
 import '../../../app/router.dart';
 import '../../../shared/design/design.dart';
 import '../onboarding_panel.dart';
@@ -254,6 +259,20 @@ class _PanelActionsState extends ConsumerState<_PanelActions> {
     context.go(MTRoutes.homePath);
   }
 
+  /// The last panel's primary action: request notification permission first,
+  /// then reach Home exactly as every other exit does.
+  ///
+  /// Deliberately thin -- it does not duplicate `_reachHome`'s own guard or
+  /// its write/navigate logic (this spec's own Code Map), it only asks first.
+  /// Either OS answer routes to Home the same way (this story's own I/O
+  /// matrix): the result is not read here because nothing on this screen
+  /// branches on it -- the Home banner is what reads permission state, fresh,
+  /// on its own next build.
+  Future<void> _requestNotificationsThenReachHome() async {
+    await ref.read(permissionGatewayProvider).requestNotificationsPermission();
+    await _reachHome();
+  }
+
   @override
   Widget build(BuildContext context) {
     final OnboardingFlow flow = ref.read(onboardingFlowProvider.notifier);
@@ -263,10 +282,11 @@ class _PanelActionsState extends ConsumerState<_PanelActions> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         FilledButton(
-          // On the last panel the primary reads "Allow notifications" and
-          // advances to Home. It does not show the OS dialog -- Story 3.1
-          // does, when notifications exist.
-          onPressed: _leaving ? null : (isLastPanel ? _reachHome : flow.next),
+          // On the last panel the primary reads "Allow notifications":
+          // it asks `PermissionGateway` first, then advances to Home.
+          onPressed: _leaving
+              ? null
+              : (isLastPanel ? _requestNotificationsThenReachHome : flow.next),
           child: Text(
             isLastPanel
                 ? OnboardingCopy.actionAllowNotifications
@@ -276,9 +296,11 @@ class _PanelActionsState extends ConsumerState<_PanelActions> {
         const SizedBox(height: MTSpacing.s2),
         TextButton(
           // "Skip intro" on panels 1 and 2, "Not now" on panel 3. All three
-          // reach the same Home with the flag persisted -- in this story the
-          // two panel-3 actions are behaviourally identical, and the copy is
-          // the only thing that distinguishes them.
+          // reach the same Home with the flag persisted. "Not now" requests
+          // nothing (this story's own Boundaries) -- it calls `_reachHome`
+          // directly, never `_requestNotificationsThenReachHome`, which is
+          // the one thing that still distinguishes it from the primary
+          // action beyond the copy.
           onPressed: _leaving ? null : _reachHome,
           child: Text(
             isLastPanel

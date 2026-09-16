@@ -23,12 +23,14 @@ import '../domain/port/clock.dart';
 import '../domain/port/dose_repository.dart';
 import '../domain/port/medicine_repository.dart';
 import '../domain/port/onboarding_state_store.dart';
+import '../domain/port/permission_gateway.dart';
 import '../platform/clock/system_clock.dart';
 import 'clock_provider.dart';
 import 'dose_repository_provider.dart';
 import 'medicine_repository_provider.dart';
 import 'onboarding_completed_at_startup_provider.dart';
 import 'onboarding_state_store_provider.dart';
+import 'permission_gateway_provider.dart';
 
 /// The `dart:developer` log source for startup. Logging is local-only (NFR-6
 /// forbids a crash reporter), so this name is how a developer finds it.
@@ -165,12 +167,18 @@ Future<Clock> resolveClockAtStartup({
 /// [doseRepository] itself once both are bound, the same way `routerProvider`
 /// composes `onboardingCompletedAtStartupProvider` rather than being listed
 /// here.
+///
+/// [permissionGateway] is Story 3.1b's addition, the sixth binding -- Home
+/// reads it fresh on every build (`home_plan_controller.dart`'s own file
+/// comment), so a launch with no override would throw the moment Home's
+/// provider first runs, not merely leave a feature unreachable.
 List<Override> startupOverrides({
   required OnboardingStateStore store,
   required bool completed,
   required MedicineRepository medicineRepository,
   required Clock clock,
   required DoseRepository doseRepository,
+  required PermissionGateway permissionGateway,
 }) {
   return <Override>[
     onboardingStateStoreProvider.overrideWithValue(store),
@@ -178,6 +186,7 @@ List<Override> startupOverrides({
     medicineRepositoryProvider.overrideWithValue(medicineRepository),
     clockProvider.overrideWithValue(clock),
     doseRepositoryProvider.overrideWithValue(doseRepository),
+    permissionGatewayProvider.overrideWithValue(permissionGateway),
   ];
 }
 

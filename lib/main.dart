@@ -34,6 +34,8 @@ import 'domain/port/clock.dart';
 import 'domain/port/dose_repository.dart';
 import 'domain/port/medicine_repository.dart';
 import 'domain/port/onboarding_state_store.dart';
+import 'domain/port/permission_gateway.dart';
+import 'platform/permissions/flutter_local_notifications_permission_gateway.dart';
 
 Future<void> main() async {
   // Needed before any plugin channel is used, and `driftDatabase` reaches
@@ -47,6 +49,12 @@ Future<void> main() async {
     database,
   );
   final DoseRepository doseRepository = DriftDoseRepository(database);
+  // AD-17's sole authority for notification/exact-alarm permission. Owns
+  // nothing and opens nothing (unlike `database` above), so it is
+  // constructed here with everything else rather than resolved asynchronously
+  // alongside `clock`.
+  const PermissionGateway permissionGateway =
+      FlutterLocalNotificationsPermissionGateway();
 
   // Closes the database when the OS tears the app down. The return value is
   // discarded on purpose: the listener registers itself with the
@@ -71,6 +79,7 @@ Future<void> main() async {
         medicineRepository: medicineRepository,
         clock: clock,
         doseRepository: doseRepository,
+        permissionGateway: permissionGateway,
       ),
     ),
   );

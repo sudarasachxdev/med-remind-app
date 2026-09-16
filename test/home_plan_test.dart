@@ -9,10 +9,13 @@
 //
 // Every test builds its own `ProviderContainer` over its own in-memory
 // database, overriding exactly `medicineRepositoryProvider`,
-// `doseRepositoryProvider` and `clockProvider` -- `doseGeneratorProvider`
-// needs no override of its own, since it composes the two repository
-// providers once they are bound (`dose_generator_provider.dart`'s own file
-// comment).
+// `doseRepositoryProvider`, `clockProvider` and (Story 3.1b)
+// `permissionGatewayProvider` -- `doseGeneratorProvider` needs no override of
+// its own, since it composes the two repository providers once they are bound
+// (`dose_generator_provider.dart`'s own file comment). The permission
+// gateway defaults to granted, so every test written before Story 3.1b keeps
+// asserting what it always did; the "notificationsDenied" group below is the
+// one that overrides it.
 
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
+import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
@@ -32,10 +36,12 @@ import 'package:med_remind_app/domain/model/schedule.dart';
 import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
+import 'package:med_remind_app/domain/port/permission_gateway.dart';
 import 'package:med_remind_app/domain/service/dose_recorder.dart';
 import 'package:med_remind_app/features/home/application/home_plan_controller.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
+import 'support/fake_permission_gateway.dart';
 import 'support/fixed_clock.dart';
 
 void main() {
@@ -56,25 +62,35 @@ void main() {
     ProviderContainer container,
     MedicineRepository medicines,
     DoseRepository doses,
+    FakePermissionGateway permissionGateway,
   })
-  buildContainer({DateTime? now}) {
+  buildContainer({DateTime? now, bool notificationsEnabled = true}) {
     final AppDatabase database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
 
     final MedicineRepository medicines = DriftMedicineRepository(database);
     final DoseRepository doses = DriftDoseRepository(database);
     final Clock clock = FixedClock(instant: now ?? defaultNow);
+    final FakePermissionGateway permissionGateway = FakePermissionGateway(
+      notificationsEnabled: notificationsEnabled,
+    );
 
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[
         medicineRepositoryProvider.overrideWithValue(medicines),
         doseRepositoryProvider.overrideWithValue(doses),
         clockProvider.overrideWithValue(clock),
+        permissionGatewayProvider.overrideWithValue(permissionGateway),
       ],
     );
     addTearDown(container.dispose);
 
-    return (container: container, medicines: medicines, doses: doses);
+    return (
+      container: container,
+      medicines: medicines,
+      doses: doses,
+      permissionGateway: permissionGateway,
+    );
   }
 
   Future<Medicine> addMedicine(
@@ -143,12 +159,16 @@ void main() {
     MedicineRepository medicines,
     DoseRepository doses, {
     DateTime? now,
+    PermissionGateway? permissionGateway,
   }) {
     final ProviderContainer container = ProviderContainer(
       overrides: <Override>[
         medicineRepositoryProvider.overrideWithValue(medicines),
         doseRepositoryProvider.overrideWithValue(doses),
         clockProvider.overrideWithValue(FixedClock(instant: now ?? defaultNow)),
+        permissionGatewayProvider.overrideWithValue(
+          permissionGateway ?? FakePermissionGateway(),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -442,6 +462,9 @@ void main() {
               medicineRepositoryProvider.overrideWithValue(c.medicines),
               doseRepositoryProvider.overrideWithValue(c.doses),
               clockProvider.overrideWithValue(FixedClock(instant: defaultNow)),
+              permissionGatewayProvider.overrideWithValue(
+                FakePermissionGateway(),
+              ),
             ],
           );
           addTearDown(after.dispose);
@@ -630,4 +653,78 @@ void main() {
       expect(plan.nextDoseAt, isNull);
     });
   });
+
+  group(
+    'notificationsDenied (Story 3.1b, read fresh via PermissionGateway)',
+    () {
+      test('permission granted -- notificationsDenied is false', () async {
+        final c = buildContainer(notificationsEnabled: true);
+
+        final HomePlan plan = await c.container.read(
+          homePlanControllerProvider.future,
+        );
+
+        expect(plan.notificationsDenied, isFalse);
+        expect(c.permissionGateway.areNotificationsEnabledCalls, 1);
+      });
+
+      test('permission denied -- notificationsDenied is true', () async {
+        final c = buildContainer(notificationsEnabled: false);
+
+        final HomePlan plan = await c.container.read(
+          homePlanControllerProvider.future,
+        );
+
+        expect(plan.notificationsDenied, isTrue);
+      });
+
+      test('revoked mid-session -- the next build reflects the new OS answer, '
+          'with no cached flag from the previous one', () async {
+        final c = buildContainer(notificationsEnabled: true);
+        final HomePlan granted = await c.container.read(
+          homePlanControllerProvider.future,
+        );
+        expect(granted.notificationsDenied, isFalse);
+
+        // "The user returns to the app": a fresh build, standing in for
+        // `homePlanControllerProvider`'s own `autoDispose` rebuild, reading
+        // the OS's now-changed answer rather than anything cached from the
+        // read above.
+        final HomePlan revoked = await remount(
+          c.medicines,
+          c.doses,
+          permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+        ).read(homePlanControllerProvider.future);
+
+        expect(revoked.notificationsDenied, isTrue);
+      });
+
+      test(
+        'denied does not change any other field this controller resolves',
+        () async {
+          final c = buildContainer(
+            now: DateTime(2026, 9, 9, 14, 0),
+            notificationsEnabled: false,
+          );
+          final Medicine medicine = await addMedicine(c.medicines);
+          // Overdue by 14:00, same as this file's own "an overdue Dose" group.
+          await addSchedule(c.medicines, medicine.id, timeOfDay: '07:00');
+
+          final HomePlan plan = await c.container.read(
+            homePlanControllerProvider.future,
+          );
+
+          expect(plan.notificationsDenied, isTrue, reason: 'the denial itself');
+          expect(
+            plan.overdueCount,
+            1,
+            reason:
+                'FR-6: every other capability resolves exactly as it would '
+                'with permission granted',
+          );
+          expect(plan.dosesScheduled, 1);
+        },
+      );
+    },
+  );
 }

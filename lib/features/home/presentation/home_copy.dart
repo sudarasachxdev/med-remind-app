@@ -217,6 +217,30 @@ abstract final class HomeCopy {
       ? 'Reminders have stopped. You can still record it.'
       : 'Reminders have stopped. You can still record them.';
 
+  // --- Notification-permission banner (Story 3.1b) --------------------------------------
+
+  /// The banner's title -- the first sentence of `EXPERIENCE.md`'s Permission
+  /// denied row, verbatim (this spec's own Boundaries: "Copy is
+  /// `EXPERIENCE.md`'s own words, verbatim").
+  static const String permissionBannerTitle = 'Notifications are off.';
+
+  /// The banner's second line -- the rest of the same sentence, verbatim.
+  /// [permissionBannerTitle] and this, joined by a space, reproduce
+  /// `EXPERIENCE.md`'s line exactly: "Notifications are off. Reminders will
+  /// not fire. MediTracker still works as a manual tracker."
+  static const String permissionBannerBody =
+      'Reminders will not fire. MediTracker still works as a manual tracker.';
+
+  /// The banner's route to `PermissionGateway.openAppNotificationSettings()`.
+  /// Not itself a quoted phrase from `EXPERIENCE.md` -- the state pattern
+  /// names the route ("a direct route to OS settings") without naming a
+  /// label for it.
+  static const String permissionBannerSettingsAction = 'Open settings';
+
+  /// The banner's dismiss control -- an icon-only button, so this is its
+  /// accessible name rather than visible text.
+  static const String permissionBannerDismiss = 'Dismiss';
+
   // --- Footer -----------------------------------------------------------------------------
 
   /// `EXPERIENCE.md`'s Voice and Tone table, verbatim -- see the file comment
@@ -313,6 +337,10 @@ abstract final class HomeCopy {
     overdueBannerTitle(2),
     overdueBannerBody(1),
     overdueBannerBody(2),
+    permissionBannerTitle,
+    permissionBannerBody,
+    permissionBannerSettingsAction,
+    permissionBannerDismiss,
     privacyFootnote,
     emptyStateTitle,
     emptyStateBody,

@@ -34,6 +34,7 @@ import '../../../app/clock_provider.dart';
 import '../../../app/dose_generator_provider.dart';
 import '../../../app/dose_repository_provider.dart';
 import '../../../app/medicine_repository_provider.dart';
+import '../../../app/permission_gateway_provider.dart';
 import '../../../domain/model/dose.dart';
 import '../../../domain/model/dose_state.dart';
 import '../../../domain/model/medicine.dart';
@@ -41,6 +42,7 @@ import '../../../domain/policy/dose_resolution_policy.dart';
 import '../../../domain/policy/dose_resolver.dart';
 import '../../../domain/port/dose_repository.dart';
 import '../../../domain/port/medicine_repository.dart';
+import '../../../domain/port/permission_gateway.dart';
 
 /// One day of the rolling week strip (UX-DR9).
 ///
@@ -109,6 +111,7 @@ final class HomePlan {
     required this.nextDoseAt,
     required this.overdueCount,
     required this.doses,
+    required this.notificationsDenied,
   });
 
   /// The instant this plan was resolved against. The greeting and the date
@@ -152,6 +155,16 @@ final class HomePlan {
   /// Today's Doses, ascending by scheduled time, each carrying its resolved
   /// state and the two Medicine fields it does not itself freeze.
   final List<HomeDoseEntry> doses;
+
+  /// Whether `PermissionGateway.areNotificationsEnabled()` read false as of
+  /// this plan's own build (Story 3.1b).
+  ///
+  /// Read fresh every time [HomePlanController.build] runs, never cached and
+  /// never a one-time read at startup: OS-level permission can change outside
+  /// the app (revoked from device Settings) at any moment, and this field
+  /// exists so a stale "granted" can never sit in front of a user whose
+  /// reminders have actually stopped firing (this spec's own Boundaries).
+  final bool notificationsDenied;
 }
 
 /// Holds Home's [HomePlan].
@@ -168,6 +181,7 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
     final DateTime now = ref.read(clockProvider).now();
 
     await _provisionalDoseGeneration(now);
+    final bool notificationsDenied = !await _notificationsCurrentlyEnabled();
 
     final DoseRepository doseRepository = ref.read(doseRepositoryProvider);
     final MedicineRepository medicineRepository = ref.read(
@@ -268,6 +282,7 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
       nextDoseAt: nextDoseAt,
       overdueCount: overdue,
       doses: entries,
+      notificationsDenied: notificationsDenied,
     );
   }
 
@@ -277,4 +292,12 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
   /// a second one beside it.
   Future<void> _provisionalDoseGeneration(DateTime now) =>
       ref.read(doseGeneratorProvider).generate(now);
+
+  /// Story 3.1b's own "one more await before assembling the plan", following
+  /// [_provisionalDoseGeneration]'s exact shape. Reads
+  /// [PermissionGateway.areNotificationsEnabled] fresh on every `build()` --
+  /// never a cached flag -- so [HomePlan.notificationsDenied] can never
+  /// report a permission state the OS no longer holds.
+  Future<bool> _notificationsCurrentlyEnabled() =>
+      ref.read(permissionGatewayProvider).areNotificationsEnabled();
 }

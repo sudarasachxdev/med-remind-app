@@ -23,6 +23,7 @@ import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
+import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 
@@ -30,6 +31,7 @@ import 'support/fake_onboarding_state_store.dart';
 import 'support/fixed_clock.dart';
 import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
+import 'support/unused_permission_gateway.dart';
 import 'support/recording_interceptor.dart';
 
 void main() {
@@ -174,6 +176,7 @@ void main() {
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
+          permissionGateway: const UnusedPermissionGateway(),
         ),
       );
       addTearDown(container.dispose);
@@ -197,6 +200,7 @@ void main() {
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
+          permissionGateway: const UnusedPermissionGateway(),
         ),
       );
       addTearDown(completed.dispose);
@@ -214,6 +218,7 @@ void main() {
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
+          permissionGateway: const UnusedPermissionGateway(),
         ),
       );
       addTearDown(fresh.dispose);
@@ -226,10 +231,11 @@ void main() {
       );
     });
 
-    test('binds all five providers and nothing else', () {
+    test('binds all six providers and nothing else', () {
       // A count, and a deliberate pause. It said `hasLength(2)` and "binds
       // both providers" until Story 1.5 added the repository and the clock,
-      // then `hasLength(4)` until Story 1.8 added the dose repository -- each
+      // `hasLength(4)` until Story 1.8 added the dose repository, and
+      // `hasLength(5)` until Story 3.1b added the permission gateway -- each
       // bump is the assertion that made the addition a decision rather than a
       // silent widening of the composition root. Bump it when you mean to.
       expect(
@@ -239,8 +245,9 @@ void main() {
           medicineRepository: const UnusedMedicineRepository(),
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
+          permissionGateway: const UnusedPermissionGateway(),
         ),
-        hasLength(5),
+        hasLength(6),
       );
     });
   });
@@ -257,8 +264,11 @@ void main() {
     // a quiet repository default stores a medicine nowhere and tells the user
     // it saved (PRD §9's worst bug), a quiet clock default has to invent a
     // timezone, which AD-6 makes permanent and Dose resolution reads as truth,
-    // and a quiet dose-repository default would have Home read an empty plan
-    // forever with nothing on screen saying why.
+    // a quiet dose-repository default would have Home read an empty plan
+    // forever with nothing on screen saying why, and a quiet permission-gateway
+    // default (Story 3.1b) would report notifications as granted with nothing
+    // real behind that answer -- AD-14's silent-success failure, from the
+    // other direction.
     for (final ({String name, ProviderBase<Object?> provider}) target
         in <({String name, ProviderBase<Object?> provider})>[
           (
@@ -267,6 +277,10 @@ void main() {
           ),
           (name: 'clockProvider', provider: clockProvider),
           (name: 'doseRepositoryProvider', provider: doseRepositoryProvider),
+          (
+            name: 'permissionGatewayProvider',
+            provider: permissionGatewayProvider,
+          ),
         ]) {
       test('${target.name} throws until the composition root binds it', () {
         final container = ProviderContainer();

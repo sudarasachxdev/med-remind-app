@@ -1,6 +1,7 @@
 // Home's real content -- UX-DR23's fixed vertical order: greeting, date, week
-// strip, progress card, overdue banner (conditional), time-grouped dose list,
-// privacy footnote.
+// strip, progress card, notification-permission banner (conditional, Story
+// 3.1b), overdue banner (conditional), time-grouped dose list, privacy
+// footnote.
 //
 // Story 1.3's placeholder ends here. `HomePlanController` is this screen's
 // only data source (AD-13: the widget reads a provider, it touches no
@@ -38,6 +39,7 @@ import 'dose_card.dart';
 import 'home_copy.dart';
 import 'home_empty_state.dart';
 import 'overdue_banner.dart';
+import 'permission_banner.dart';
 import 'progress_card.dart';
 import 'week_strip.dart';
 
@@ -72,7 +74,7 @@ class HomeScreen extends ConsumerWidget {
             // 2. Date.
             _DatePill(now: now),
             const SizedBox(height: MTSpacing.s5),
-            // 3-6: week strip, progress card, the conditional overdue banner,
+            // 3-7: week strip, progress card, the two conditional banners,
             // and the dose list -- all of it needs the resolved plan.
             planAsync.when(
               data: (HomePlan plan) => _HomePlanBody(plan: plan),
@@ -81,7 +83,7 @@ class HomeScreen extends ConsumerWidget {
                   const _HomePlanUnavailable(),
             ),
             const SizedBox(height: MTSpacing.s6),
-            // 7. Privacy footnote.
+            // 8. Privacy footnote.
             Text(
               HomeCopy.privacyFootnote,
               textAlign: TextAlign.center,
@@ -184,10 +186,11 @@ class _HomePlanBody extends StatelessWidget {
   }
 }
 
-/// The progress card, the conditional overdue banner, and the time-grouped
-/// dose list -- Story 1.8's populated plan, extracted unchanged so
-/// `_HomePlanBody` can branch above it (Story 1.9) without touching what
-/// either branch renders.
+/// The progress card, the two conditional banners, and the time-grouped dose
+/// list -- Story 1.8's populated plan, extracted so `_HomePlanBody` can branch
+/// above it (Story 1.9) without touching what either branch renders. Story
+/// 3.1b adds the notification-permission banner between the progress card and
+/// the overdue banner; neither of Story 1.8's own two renderings changes.
 class _PopulatedPlan extends StatelessWidget {
   const _PopulatedPlan({required this.plan});
 
@@ -204,14 +207,23 @@ class _PopulatedPlan extends StatelessWidget {
           dosesScheduled: plan.dosesScheduled,
           nextDoseAt: plan.nextDoseAt,
         ),
-        // 5. Overdue banner -- present only when there is one to show
+        // 5. Notification-permission banner -- present only while
+        // `PermissionGateway.areNotificationsEnabled()` last read false
+        // (Story 3.1b). Sits above the overdue banner (UX-DR23, amended
+        // 2026-09-16): a capability-level degradation outranks an
+        // item-level one.
+        if (plan.notificationsDenied) ...<Widget>[
+          const SizedBox(height: MTSpacing.s4),
+          const PermissionBanner(),
+        ],
+        // 6. Overdue banner -- present only when there is one to show
         // (this spec's own "banner absent entirely" row: not empty, not
         // hidden, simply not built).
         if (plan.overdueCount > 0) ...<Widget>[
           const SizedBox(height: MTSpacing.s4),
           OverdueBanner(overdueCount: plan.overdueCount),
         ],
-        // 6. The time-grouped dose list. `plan.now` -- the one instant this
+        // 7. The time-grouped dose list. `plan.now` -- the one instant this
         // whole plan was resolved against -- rather than a second clock read,
         // so a Snoozed card's own "reminder in {n} min" cannot disagree with
         // what `resolve()` itself used (Story 2.3).

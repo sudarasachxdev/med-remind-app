@@ -21,6 +21,7 @@ import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/onboarding_completed_at_startup_provider.dart';
 import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
+import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
@@ -36,9 +37,11 @@ import 'package:go_router/go_router.dart';
 import 'package:med_remind_app/shared/design/design.dart';
 
 import 'support/fake_onboarding_state_store.dart';
+import 'support/fake_permission_gateway.dart';
 import 'support/fixed_clock.dart';
 import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
+import 'support/unused_permission_gateway.dart';
 
 /// The design's reference device frame: 402 x 874 logical pixels (iOS).
 const Size _referenceFrame = Size(402, 874);
@@ -125,11 +128,7 @@ void main() {
       );
     });
 
-    testWidgets('panel 3 names its actions and shows no OS dialog', (
-      tester,
-    ) async {
-      final List<String> platformCalls = _watchPermissionChannels(tester);
-
+    testWidgets('panel 3 names its actions', (tester) async {
       await _pumpApp(tester);
       await _tap(tester, OnboardingCopy.actionContinue);
       await _tap(tester, OnboardingCopy.actionContinue);
@@ -147,6 +146,17 @@ void main() {
         find.widgetWithText(TextButton, OnboardingCopy.actionNotNow),
         findsOneWidget,
       );
+    });
+
+    testWidgets('neither panel-3 action ever touches a raw permission platform '
+        'channel -- PermissionGateway stays the sole authority (AD-17)', (
+      tester,
+    ) async {
+      final List<String> platformCalls = _watchPermissionChannels(tester);
+
+      await _pumpApp(tester);
+      await _tap(tester, OnboardingCopy.actionContinue);
+      await _tap(tester, OnboardingCopy.actionContinue);
 
       await _tap(tester, OnboardingCopy.actionAllowNotifications);
 
@@ -154,10 +164,70 @@ void main() {
         platformCalls,
         isEmpty,
         reason:
-            'Panel 3 explains; it does not ask. Story 3.1 triggers the real '
-            'dialog, when there are notifications to permit. Calls seen: '
+            'This test binds a FakePermissionGateway, not the real '
+            'flutter_local_notifications adapter -- so a call reaching a '
+            'raw platform channel from here would mean a feature bypassed '
+            'PermissionGateway entirely, which AD-17 and '
+            'test/story_scope_test.dart both forbid. Calls seen: '
             '$platformCalls',
       );
+    });
+  });
+
+  group('panel 3\'s two exit paths request permission differently (Story '
+      '3.1b, this spec\'s own I/O matrix)', () {
+    testWidgets(
+      'Allow notifications calls PermissionGateway.requestNotificationsPermission, '
+      'then reaches Home either way',
+      (tester) async {
+        final gateway = FakePermissionGateway();
+        await _pumpApp(tester, permissionGateway: gateway);
+        await _tap(tester, OnboardingCopy.actionContinue);
+        await _tap(tester, OnboardingCopy.actionContinue);
+
+        await _tap(tester, OnboardingCopy.actionAllowNotifications);
+
+        expect(gateway.requestNotificationsPermissionCalls, 1);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Not now requests nothing -- it still reaches Home the same way',
+      (tester) async {
+        final gateway = FakePermissionGateway();
+        await _pumpApp(tester, permissionGateway: gateway);
+        await _tap(tester, OnboardingCopy.actionContinue);
+        await _tap(tester, OnboardingCopy.actionContinue);
+
+        await _tap(tester, OnboardingCopy.actionNotNow);
+
+        expect(gateway.requestNotificationsPermissionCalls, 0);
+        expect(find.byType(HomeScreen), findsOneWidget);
+      },
+    );
+
+    testWidgets('either OS answer to Allow notifications still reaches Home', (
+      tester,
+    ) async {
+      for (final bool granted in <bool>[true, false]) {
+        final gateway = FakePermissionGateway(notificationsEnabled: granted);
+        await _pumpApp(tester, permissionGateway: gateway);
+        await _tap(tester, OnboardingCopy.actionContinue);
+        await _tap(tester, OnboardingCopy.actionContinue);
+
+        await _tap(tester, OnboardingCopy.actionAllowNotifications);
+
+        expect(
+          find.byType(HomeScreen),
+          findsOneWidget,
+          reason: 'granted: $granted',
+        );
+        // Torn down before the next iteration's `_pumpApp` builds a fresh
+        // tree, the same way `onboarding_screen_test.dart`'s own relaunch
+        // tests do between two pumps.
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
     });
   });
 
@@ -368,6 +438,7 @@ void main() {
             medicineRepository: const UnusedMedicineRepository(),
             clock: FixedClock(),
             doseRepository: const UnusedDoseRepository(),
+            permissionGateway: const UnusedPermissionGateway(),
           ),
         ),
       );
@@ -403,6 +474,7 @@ void main() {
             medicineRepository: const UnusedMedicineRepository(),
             clock: FixedClock(),
             doseRepository: const UnusedDoseRepository(),
+            permissionGateway: const UnusedPermissionGateway(),
           ),
         ),
       );
@@ -849,6 +921,7 @@ Future<FakeOnboardingStateStore> _pumpApp(
   WidgetTester tester, {
   bool completed = false,
   FakeOnboardingStateStore? store,
+  FakePermissionGateway? permissionGateway,
 }) async {
   // Every test here is about a phone in portrait, which is the only shape V1
   // targets. The default 800x600 test surface is neither, and a layout that
@@ -880,6 +953,13 @@ Future<FakeOnboardingStateStore> _pumpApp(
         ),
         doseRepositoryProvider.overrideWithValue(DriftDoseRepository(database)),
         clockProvider.overrideWithValue(FixedClock()),
+        // Story 3.1b: Home reads this fresh on every build, so a test that
+        // reaches Home at all needs a real (if fake) answer bound here --
+        // granted by default, so the permission banner does not appear in
+        // tests about something else entirely.
+        permissionGatewayProvider.overrideWithValue(
+          permissionGateway ?? FakePermissionGateway(),
+        ),
       ],
     ),
   );
