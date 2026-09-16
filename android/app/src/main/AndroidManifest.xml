@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Story 3.1a / AD-17 / AD-14: exactly these three, never
+         USE_EXACT_ALARM -- its Play-review eligibility for a medication
+         reminder app is arguable, and SCHEDULE_EXACT_ALARM is the
+         user-revocable alternative this app is built to handle a denial of. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
     <application
         android:label="med_remind_app"
         android:name="${applicationName}"

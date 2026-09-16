@@ -34,13 +34,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Packages no file under `lib/` may import yet.
 ///
-/// `flutter_local_notifications` IS a declared dependency -- Story 1.1 added it
-/// so that Epic 3 has it, and AD-17 makes it the sole authority for permission
-/// state. Declaring it is not using it, and this story uses none of it.
+/// `flutter_local_notifications` was here until Story 3.1a, forbidden as
+/// "Story 3.1 owns notifications and the permission request. Panel 3 explains
+/// why they are wanted; it does not ask." Story 3.1a is that story: it builds
+/// `PermissionGateway` and the one adapter permitted to import the package, so
+/// the entry moves to [_directoryScopedImports] below rather than
+/// disappearing -- the same move `flutter_timezone` made when AD-9 was
+/// amended, for the same reason: the permission is real now, but narrow.
 const Map<String, String> _forbiddenImports = <String, String>{
-  'flutter_local_notifications':
-      'Story 3.1 owns notifications and the permission request. Panel 3 '
-      'explains why they are wanted; it does not ask.',
   'permission_handler':
       'AD-17: permission_handler is not a dependency of this project at all. '
       'flutter_local_notifications is the single authority.',
@@ -77,23 +78,25 @@ const Map<String, String> _forbiddenImports = <String, String>{
 /// is an architecture decision, not a test edit.
 const Map<String, String> _directoryScopedImports = <String, String>{
   'flutter_timezone': 'lib/platform/clock',
+  // `flutter_local_notifications` joined here at Story 3.1a, the same day it
+  // left [_forbiddenImports] -- see that map's own comment. AD-17 makes the
+  // adapter this narrows to the sole authority for permission state; a second
+  // importer is an architecture decision (a real second call site), not a
+  // test edit.
+  'flutter_local_notifications': 'lib/platform/permissions',
 };
 
 /// Identifiers that would mean a permission is being requested, whatever the
 /// import looks like.
-const Map<String, String> _forbiddenIdentifiers = <String, String>{
-  'requestPermission':
-      'Triggering a real permission request anywhere in this story is out of '
-      'scope -- it needs the user\'s word, and Story 3.1 has it.',
-  'requestNotificationsPermission': 'As above.',
-  'requestExactAlarmsPermission': 'As above.',
-  'openAppNotificationSettings':
-      'The route into OS settings belongs with the permission-denied banner '
-      '(Story 3.1), not with the explainer.',
-  'PermissionGateway':
-      'The port exists from Story 3.1. Nothing here needs it: this story '
-      'shows the explainer and both of its actions go to Home.',
-};
+///
+/// Retired empty by Story 3.1a, which is the story every entry here named:
+/// `requestPermission`, `requestNotificationsPermission`,
+/// `requestExactAlarmsPermission`, `openAppNotificationSettings` and
+/// `PermissionGateway` all named "Story 3.1 has it" or "the port exists from
+/// Story 3.1" as their own reason to go. Kept as an empty map, the same house
+/// rule [_providerHomes] states: a guard is retired by deleting its entry,
+/// not by deleting the mechanism.
+const Map<String, String> _forbiddenIdentifiers = <String, String>{};
 
 /// Directories this story must not add code to, mapped to the story that may.
 ///
@@ -129,7 +132,32 @@ const Map<String, String> _directoriesThisStoryDoesNotOwn = <String, String>{
 /// house rule the file comment states: a guard is retired by deleting its
 /// entry, not by deleting the mechanism, so the next port with no caller yet
 /// has somewhere to be listed.
-const Map<String, String> _providerHomes = <String, String>{};
+///
+/// Story 3.1a is that next port: `PermissionGateway` has no caller yet either
+/// (Story 3.1b is its first), and this time the absence spans two
+/// directories -- `lib/app/`, where every provider in this project lives, and
+/// `lib/features/`, the Boundaries' own second name for "no caller". Each
+/// entry carries its own identifier list rather than sharing one: `lib/app/`
+/// already legitimately names `DoseRepository` and `DoseGenerator` (Story
+/// 1.8), so reusing that old shared list here would fail on wiring this file
+/// already approved.
+const Map<String, ({List<String> identifiers, String reason})> _providerHomes =
+    <String, ({List<String> identifiers, String reason})>{
+      'lib/app': (
+        identifiers: <String>['PermissionGateway'],
+        reason:
+            'Story 3.1a builds PermissionGateway with no caller yet -- Story '
+            '3.1b is its first. A binding here would be that story landing '
+            'early.',
+      ),
+      'lib/features': (
+        identifiers: <String>['PermissionGateway'],
+        reason:
+            'Story 3.1a builds PermissionGateway with no caller yet -- Story '
+            '3.1b is its first. A caller here would be that story landing '
+            'early.',
+      ),
+    };
 
 /// Identifiers that must not appear in a domain model file, by file.
 ///
@@ -287,8 +315,8 @@ void main() {
     // for one of them would be a guard that regressed rather than one that
     // still protects something. Second -- the loop below -- that whatever
     // `_providerHomes` currently forbids is really absent from the directory
-    // it names. It is empty as of Story 1.8, which is why the loop runs zero
-    // times; it stays in the test, ready for the next port with no caller yet.
+    // it names. It ran zero times from Story 1.8 to Story 3.1a, which is when
+    // `PermissionGateway` refilled it with its own still-open absence.
     for (final String path in <String>[
       'lib/app/medicine_repository_provider.dart',
       'lib/app/dose_repository_provider.dart',
@@ -304,7 +332,9 @@ void main() {
       );
     }
 
-    for (final MapEntry<String, String> home in _providerHomes.entries) {
+    for (final MapEntry<String, ({List<String> identifiers, String reason})>
+        home
+        in _providerHomes.entries) {
       final Directory directory = Directory(home.key);
       expect(
         directory.existsSync(),
@@ -319,15 +349,11 @@ void main() {
               .whereType<File>()
               .where((File f) => f.path.endsWith('.dart'))) {
         final String code = _withoutComments(file.readAsStringSync());
-        for (final String named in <String>[
-          'DoseRepository',
-          'DriftDoseRepository',
-          'DoseGenerator',
-        ]) {
+        for (final String named in home.value.identifiers) {
           expect(
             code,
             isNot(contains(named)),
-            reason: '${file.path} names $named. ${home.value}',
+            reason: '${file.path} names $named. ${home.value.reason}',
           );
         }
       }
@@ -336,10 +362,10 @@ void main() {
 
   test('the platform adapters this story does not own are still empty', () {
     for (final String layer in <String>[
-      // Epic 3 -- flutter_local_notifications.
+      // Epic 3 -- flutter_local_notifications, the scheduling adapter Stories
+      // 3.2/3.3 build. `lib/platform/permissions` left this list at Story
+      // 3.1a, which is the story that owns it.
       'lib/platform/notifications',
-      // Story 3.1 -- the PermissionGateway (AD-17).
-      'lib/platform/permissions',
       // Epic 3 -- flutter_timezone, read only by the Reconciler (AD-6, AD-9).
       // Listed because it is the third plugin adapter and the one an
       // "innocent" helper is most likely to reach into: a screen that wants
