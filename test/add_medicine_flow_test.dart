@@ -188,6 +188,37 @@ void main() {
       expect(schedules.single.timeOfDay, '20:00');
       expect(schedules.single.frequency, Frequency.everyDay);
       expect(schedules.single.dosageAmount, 2.0);
+      expect(
+        schedules.single.remindersEnabled,
+        isTrue,
+        reason: 'the toggle defaults to on (AddMedicineDraft.remindersEnabled)',
+      );
+    });
+
+    test('a reminders-disabled draft is saved with remindersEnabled false '
+        '(FR-11 -- the toggle Story 1.5 wired to the UI and this story wires '
+        'the rest of the way to the repository)', () async {
+      fillValid();
+      controller()
+        ..setReminders(enabled: false)
+        ..advance()
+        ..advance();
+
+      expect(await controller().save(), isTrue);
+
+      final Medicine saved = (await repository.allMedicines()).single;
+      final Schedule schedule = (await repository.schedulesFor(
+        saved.id,
+      )).single;
+      expect(
+        schedule.remindersEnabled,
+        isFalse,
+        reason:
+            'Without add_medicine_controller.dart passing '
+            'remindersEnabled: draft.remindersEnabled to addSchedule, this '
+            'reads back true regardless of what the user chose -- the '
+            'confirmed gap this story closes.',
+      );
     });
 
     test('the start date is the injected clock, not the wall clock', () async {
@@ -504,6 +535,7 @@ final class _RejectingSchedules implements MedicineRepository {
     int? intervalDays,
     required double dosageAmount,
     String? reminderOverride,
+    required bool remindersEnabled,
   }) => Future<Schedule>.error(failure, StackTrace.current);
 
   @override

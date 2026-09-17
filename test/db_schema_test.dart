@@ -17,7 +17,10 @@
 //
 // This also pins the schema's scope at each version: `app_settings`,
 // `medicines` and `schedules` were the only tables through Story 1.6; `doses`
-// (Story 1.7a) is the fourth and, for now, the last.
+// (Story 1.7a) is the fourth and, for now, the last table. Story 3.3 adds no
+// table -- only `schedules.reminders_enabled`, closing the pre-existing gap
+// where FR-11's toggle was wired from the UI down to `AddMedicineDraft` and
+// silently discarded at the one call site that persists it.
 
 import 'dart:io';
 
@@ -46,15 +49,16 @@ void main() {
     await database.close();
   });
 
-  group('AppDatabase at schema version 3', () {
-    test('declares version 3', () {
+  group('AppDatabase at schema version 4', () {
+    test('declares version 4', () {
       expect(
         database.schemaVersion,
-        3,
+        4,
         reason:
-            'AD-15: adding doses is a schema change, so the version bumps. '
-            'Leaving it at 2 would mean an installed app never calls '
-            'onUpgrade and runs this story\'s code against the old schema.',
+            'AD-15: adding schedules.reminders_enabled is a schema change, '
+            'so the version bumps. Leaving it at 3 would mean an installed '
+            'app never calls onUpgrade and runs this story\'s code against '
+            'the old schema.',
       );
     });
 
@@ -163,7 +167,7 @@ void main() {
             .customSelect('PRAGMA user_version')
             .get();
 
-        expect(rows.single.data['user_version'], 3);
+        expect(rows.single.data['user_version'], 4);
       },
     );
 
@@ -223,7 +227,7 @@ void main() {
             'install left behind. Found: '
             '${directory.listSync().map((FileSystemEntity e) => e.uri.pathSegments.last).toList()}',
       );
-      expect(production.schemaVersion, 3);
+      expect(production.schemaVersion, 4);
     });
   });
 
@@ -241,15 +245,16 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final File file = File('${directory.path}/db.sqlite');
 
-      // A file written by a future build: schema version 4. It has to be
-      // ABOVE this build's version, and this build is now at 3 -- a test that
-      // kept writing 3 here would silently stop testing a downgrade the moment
-      // the app reached that version, which is exactly what happened to this
-      // line when the app moved from Story 1.3's version to Story 1.4's, and
-      // has now happened again moving to Story 1.7a's.
+      // A file written by a future build: schema version 5. It has to be
+      // ABOVE this build's version, and this build is now at 4 -- a test that
+      // kept writing an old number here would silently stop testing a
+      // downgrade the moment the app reached that version, which is exactly
+      // what happened to this line as the app moved from Story 1.3's version
+      // through Story 1.4's and Story 1.7a's, and has now happened again
+      // moving to this story's.
       final AppDatabase future = AppDatabase(NativeDatabase(file));
       await future.customSelect('SELECT 1').get();
-      await future.customStatement('PRAGMA user_version = 4');
+      await future.customStatement('PRAGMA user_version = 5');
       await future.close();
 
       final AppDatabase current = AppDatabase(NativeDatabase(file));
@@ -262,12 +267,12 @@ void main() {
               .having(
                 (AppDatabaseVersionMismatch e) => e.storedVersion,
                 'storedVersion',
-                4,
+                5,
               )
               .having(
                 (AppDatabaseVersionMismatch e) => e.appVersion,
                 'appVersion',
-                3,
+                4,
               )
               .having(
                 (AppDatabaseVersionMismatch e) => e.isDowngrade,
@@ -331,7 +336,7 @@ void main() {
       await future.customStatement(
         'CREATE TABLE a_table_from_the_future (x INTEGER)',
       );
-      await future.customStatement('PRAGMA user_version = 4');
+      await future.customStatement('PRAGMA user_version = 5');
       await future.close();
       final int sizeBefore = file.lengthSync();
 
@@ -469,7 +474,7 @@ void main() {
   });
 
   group('schedules — wall clock plus a zone, and no instant (AD-6)', () {
-    test('holds exactly the ERD\'s nine columns', () async {
+    test('holds exactly the ERD\'s ten columns', () async {
       expect(
         await _columnShapes(database, 'schedules'),
         equals(<String>[
@@ -482,11 +487,29 @@ void main() {
           'interval_days INTEGER nullable',
           'dosage_amount REAL notnull',
           'reminder_override TEXT nullable',
+          'reminders_enabled INTEGER notnull',
         ]),
         reason:
-            'Nine columns, and the list is exhaustive on purpose: a tenth '
+            'Ten columns, and the list is exhaustive on purpose: an eleventh '
             'holding the same time in another form is the AD-6 violation this '
-            'test exists to catch.',
+            'test exists to catch. `reminders_enabled` (Story 3.3) is FR-11\'s '
+            'own toggle, not a second representation of the time.',
+      );
+    });
+
+    test('remindersEnabled defaults to true', () async {
+      final Map<String, Object?> remindersEnabled = (await _tableInfo(
+        database,
+        'schedules',
+      )).last;
+
+      expect(remindersEnabled['name'], 'reminders_enabled');
+      expect(
+        remindersEnabled['dflt_value'],
+        '1',
+        reason:
+            'a fresh install\'s very first save, and a pre-Story-3.3 row '
+            'read back after migration, both mean "reminders on"',
       );
     });
 
@@ -810,7 +833,7 @@ void main() {
           .get();
       expect(
         version.single.data['user_version'],
-        3,
+        4,
         reason:
             'the version has to come back off disk, or onUpgrade never fires',
       );

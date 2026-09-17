@@ -25,14 +25,30 @@
 // fold for the first few milliseconds of every launch, which is a blocking
 // gate this story's own AD-21 criterion forbids. Only the sections that
 // genuinely need a Dose (or the count of one) wait on the provider.
+//
+// THE ROUTE IN (Story 3.3): a tapped notification's `doseId`, from
+// `notificationTapProvider`, opens that Dose's action sheet once Home is
+// showing -- no new route, per that story's own Design Notes ("Why no new
+// route"). Two orderings both happen in practice and neither may be skipped:
+// a cold launch delivers the tap before `HomePlan` has loaded; a warm tap
+// while Home is already showing delivers it after. `_pendingTapDoseId` holds
+// whichever arrived first, and `_maybeOpenPendingActionSheet` is re-checked
+// on BOTH events -- a fresh tap, and every rebuild this widget's own `build`
+// runs, which covers the plan finishing its load -- so whichever ordering
+// occurs, the check that finally has both pieces is the one that opens the
+// sheet. This is why `HomeScreen` is a `ConsumerStatefulWidget` now, not the
+// `ConsumerWidget` it was through Story 3.1b: the pending id needs to survive
+// from one rebuild to the next, in `State` rather than recomputed each time.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/clock_provider.dart';
+import '../../../app/notification_tap_provider.dart';
 import '../../../app/router.dart';
 import '../../../shared/design/design.dart';
+import '../../../shared/widgets/dose_action_sheet.dart';
 import '../../add_medicine/presentation/add_medicine_copy.dart';
 import '../application/home_plan_controller.dart';
 import 'dose_card.dart';
@@ -44,15 +60,42 @@ import 'progress_card.dart';
 import 'week_strip.dart';
 
 /// The app's Home surface: today's plan.
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  /// A tapped notification's `doseId`, held until it can be checked against
+  /// a loaded `HomePlan` -- see this file's own header comment on why both
+  /// orderings need this rather than acting the moment the tap arrives.
+  String? _pendingTapDoseId;
+
+  @override
+  Widget build(BuildContext context) {
     final DateTime now = ref.watch(clockProvider).now();
     final AsyncValue<HomePlan> planAsync = ref.watch(
       homePlanControllerProvider,
     );
+
+    // A fresh tap: recorded and (re-)checked against whatever plan is
+    // currently held. `ref.listen`, not `ref.watch` -- a tap is an event to
+    // react to once, not a value this build should read every time it runs
+    // for an unrelated reason.
+    ref.listen<AsyncValue<String>>(notificationTapProvider, (
+      AsyncValue<String>? previous,
+      AsyncValue<String> next,
+    ) {
+      final String? doseId = next.valueOrNull;
+      if (doseId != null) _pendingTapDoseId = doseId;
+      _scheduleActionSheetCheck();
+    });
+    // The plan itself changing (including finishing its very first load) is
+    // the other event that can complete a pending tap -- re-checked on every
+    // build for that reason, not only when a tap just arrived.
+    _scheduleActionSheetCheck();
 
     return Scaffold(
       backgroundColor: MTColors.surfaceApp,
@@ -92,6 +135,52 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Defers [_maybeOpenPendingActionSheet] to after this frame -- never
+  /// mid-build, per this story's own Code Map: opening a sheet (which itself
+  /// builds widgets) while `build` is still running is the exact re-entrant
+  /// build Flutter forbids.
+  void _scheduleActionSheetCheck() {
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      _maybeOpenPendingActionSheet();
+    });
+  }
+
+  /// Opens the pending tap's Dose in `DoseActionSheet`, once a loaded
+  /// `HomePlan` actually names it.
+  ///
+  /// Three outcomes: nothing pending (no-op); pending, but the plan has not
+  /// loaded yet (left pending -- a later build, once it has, checks again);
+  /// pending and loaded, but no entry in today's plan names this doseId --
+  /// this spec's own named edge case (the Dose was deleted), dropped
+  /// silently here rather than retried forever, since no future plan update
+  /// would ever make it match.
+  void _maybeOpenPendingActionSheet() {
+    if (!mounted) return;
+    final String? doseId = _pendingTapDoseId;
+    if (doseId == null) return;
+
+    final HomePlan? plan = ref.read(homePlanControllerProvider).valueOrNull;
+    if (plan == null) return;
+
+    HomeDoseEntry? match;
+    for (final HomeDoseEntry entry in plan.doses) {
+      if (entry.dose.id == doseId) {
+        match = entry;
+        break;
+      }
+    }
+
+    _pendingTapDoseId = null;
+    if (match == null) return;
+
+    DoseActionSheet.show(
+      context,
+      dose: match.dose,
+      glyphIndex: match.glyphIndex,
+      condition: match.condition,
     );
   }
 }
@@ -207,14 +296,25 @@ class _PopulatedPlan extends StatelessWidget {
           dosesScheduled: plan.dosesScheduled,
           nextDoseAt: plan.nextDoseAt,
         ),
-        // 5. Notification-permission banner -- present only while
-        // `PermissionGateway.areNotificationsEnabled()` last read false
-        // (Story 3.1b). Sits above the overdue banner (UX-DR23, amended
-        // 2026-09-16): a capability-level degradation outranks an
-        // item-level one.
+        // 5. Permission banner -- present only while one of the two
+        // degradations `PermissionGateway` reports currently applies. Full
+        // denial (Story 3.1b) takes priority over the milder exact-alarm
+        // denial (AD-14, Story 3.3) when both are true: the weaker fact
+        // (reminders may be late) is entirely subsumed by the stronger one
+        // (reminders will not fire), so the two are never shown together
+        // (this spec's own Design Notes). Sits above the overdue banner
+        // (UX-DR23, amended 2026-09-16): a capability-level degradation
+        // outranks an item-level one.
         if (plan.notificationsDenied) ...<Widget>[
           const SizedBox(height: MTSpacing.s4),
-          const PermissionBanner(),
+          const PermissionBanner(
+            reason: PermissionBannerReason.notificationsDenied,
+          ),
+        ] else if (plan.exactAlarmsDenied) ...<Widget>[
+          const SizedBox(height: MTSpacing.s4),
+          const PermissionBanner(
+            reason: PermissionBannerReason.exactAlarmsDenied,
+          ),
         ],
         // 6. Overdue banner -- present only when there is one to show
         // (this spec's own "banner absent entirely" row: not empty, not

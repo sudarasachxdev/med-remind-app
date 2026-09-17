@@ -10,6 +10,16 @@
 // to prove this file's own logic: fire-time computation, id derivation, and
 // payload/id wiring -- there is no second branch of this adapter's own code
 // a second platform would exercise.
+//
+// A fresh `notifier` is constructed in `setUp` for EVERY test, rather than
+// shared as one file-level `const` the way Story 3.2 left it: Story 3.3's
+// `notificationTaps` is a single-subscription stream, which can only ever be
+// listened to once over its lifetime, and its own cold-launch check
+// (`getNotificationAppLaunchDetails`) needs a per-test answer. `_initialized`
+// therefore moved from a `static` guard to an instance field (see that
+// field's own doc comment in the adapter) -- with a fresh instance per test,
+// this is the only shape that keeps every test's `initialize()` call, and
+// every test's own tap stream, independent of every other test's.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +31,8 @@ import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/platform/notifications/flutter_local_notifications_dose_notifier.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
+import 'support/fake_permission_gateway.dart';
+
 const MethodChannel _channel = MethodChannel(
   'dexterous.com/flutter/local_notifications',
 );
@@ -29,12 +41,18 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(tzdata.initializeTimeZones);
 
-  const DoseNotifier notifier = FlutterLocalNotificationsDoseNotifier();
-
   late List<MethodCall> calls;
+  late FakePermissionGateway permissionGateway;
+  late DoseNotifier notifier;
+
+  /// What the mocked `getNotificationAppLaunchDetails` channel call answers.
+  /// `null` (the default) means "no launch details" -- an ordinary warm
+  /// start, not one caused by a notification tap.
+  Map<Object?, Object?>? launchDetailsResponse;
 
   setUp(() {
     calls = <MethodCall>[];
+    launchDetailsResponse = null;
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     AndroidFlutterLocalNotificationsPlugin.registerWith();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -43,10 +61,16 @@ void main() {
           switch (call.method) {
             case 'initialize':
               return true;
+            case 'getNotificationAppLaunchDetails':
+              return launchDetailsResponse;
             default:
               return null;
           }
         });
+    permissionGateway = FakePermissionGateway();
+    notifier = FlutterLocalNotificationsDoseNotifier(
+      permissionGateway: permissionGateway,
+    );
   });
 
   tearDown(() {
@@ -77,6 +101,32 @@ void main() {
 
   Map<Object?, Object?> zonedScheduleArgs() =>
       zonedScheduleCall().arguments as Map<Object?, Object?>;
+
+  /// Delivers a platform-to-Dart notification-response call, exactly as
+  /// `AndroidFlutterLocalNotificationsPlugin._handleMethod` decodes it
+  /// (`didReceiveNotificationResponse`, verified against the installed
+  /// 22.3.0 source). This is the one channel direction
+  /// `setMockMethodCallHandler` cannot fake -- that only intercepts calls
+  /// FROM Dart -- so it goes through
+  /// `defaultBinaryMessenger.handlePlatformMessage` instead, the same path
+  /// the real native side uses to invoke a registered method channel
+  /// handler.
+  Future<void> deliverNotificationResponse({
+    required String? payload,
+    required NotificationResponseType type,
+  }) async {
+    final ByteData message = const StandardMethodCodec().encodeMethodCall(
+      MethodCall('didReceiveNotificationResponse', <String, Object?>{
+        'notificationId': 1,
+        'actionId': null,
+        'input': null,
+        'payload': payload,
+        'notificationResponseType': type.index,
+      }),
+    );
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(_channel.name, message, (ByteData? _) {});
+  }
 
   test('schedule(primary) fires at dose.scheduledAt, unmodified, and calls '
       'zonedSchedule with the derived id and dose.id as the payload', () async {
@@ -231,5 +281,205 @@ void main() {
         )
         .toSet();
     expect(actualIds, expectedIds);
+  });
+
+  group('AD-14: the exact-alarm fallback', () {
+    test('exact alarms allowed: schedules with exactAllowWhileIdle', () async {
+      permissionGateway.exactAlarmsAllowed = true;
+      final Dose dose = buildDose(scheduledLocal: DateTime(2027, 1, 15, 8));
+
+      await notifier.schedule(
+        dose: dose,
+        tier: NotificationTier.primary,
+        title: 'T',
+        body: 'B',
+      );
+
+      final Map<Object?, Object?> platformSpecifics =
+          zonedScheduleArgs()['platformSpecifics'] as Map<Object?, Object?>;
+      expect(
+        platformSpecifics['scheduleMode'],
+        AndroidScheduleMode.exactAllowWhileIdle.name,
+      );
+    });
+
+    test('exact alarms denied: falls back to inexactAllowWhileIdle', () async {
+      permissionGateway.exactAlarmsAllowed = false;
+      final Dose dose = buildDose(scheduledLocal: DateTime(2027, 1, 15, 8));
+
+      await notifier.schedule(
+        dose: dose,
+        tier: NotificationTier.primary,
+        title: 'T',
+        body: 'B',
+      );
+
+      final Map<Object?, Object?> platformSpecifics =
+          zonedScheduleArgs()['platformSpecifics'] as Map<Object?, Object?>;
+      expect(
+        platformSpecifics['scheduleMode'],
+        AndroidScheduleMode.inexactAllowWhileIdle.name,
+        reason:
+            'AD-14: denied exact-alarm permission degrades to an inexact '
+            'fire time rather than failing to schedule at all',
+      );
+    });
+
+    test('reads the permission fresh on every call, not cached', () async {
+      final Dose dose = buildDose(scheduledLocal: DateTime(2027, 1, 15, 8));
+
+      permissionGateway.exactAlarmsAllowed = false;
+      await notifier.schedule(
+        dose: dose,
+        tier: NotificationTier.primary,
+        title: 'T',
+        body: 'B',
+      );
+      final String firstMode =
+          (zonedScheduleArgs()['platformSpecifics']
+                  as Map<Object?, Object?>)['scheduleMode']!
+              as String;
+      calls.clear();
+
+      permissionGateway.exactAlarmsAllowed = true;
+      await notifier.schedule(
+        dose: dose,
+        tier: NotificationTier.primary,
+        title: 'T',
+        body: 'B',
+      );
+      final String secondMode =
+          (zonedScheduleArgs()['platformSpecifics']
+                  as Map<Object?, Object?>)['scheduleMode']!
+              as String;
+
+      expect(firstMode, AndroidScheduleMode.inexactAllowWhileIdle.name);
+      expect(secondMode, AndroidScheduleMode.exactAllowWhileIdle.name);
+    });
+  });
+
+  group('AD-3: no action buttons, no background handler', () {
+    test('the NotificationDetails passed to zonedSchedule carries no '
+        'actions', () async {
+      final Dose dose = buildDose(scheduledLocal: DateTime(2027, 1, 15, 8));
+
+      await notifier.schedule(
+        dose: dose,
+        tier: NotificationTier.primary,
+        title: 'T',
+        body: 'B',
+      );
+
+      final Map<Object?, Object?> platformSpecifics =
+          zonedScheduleArgs()['platformSpecifics'] as Map<Object?, Object?>;
+      expect(
+        platformSpecifics.containsKey('actions'),
+        isFalse,
+        reason:
+            'AD-3: a tap opens the action sheet; the notification itself '
+            'offers no in-line buttons',
+      );
+    });
+
+    test("initialize's call arguments never include a background-response "
+        'handler', () async {
+      await notifier.cancelPending('dose-1');
+
+      final MethodCall initializeCall = calls.singleWhere(
+        (MethodCall c) => c.method == 'initialize',
+      );
+      final Map<Object?, Object?> args =
+          initializeCall.arguments as Map<Object?, Object?>;
+      expect(
+        args.containsKey('dispatcher_handle'),
+        isFalse,
+        reason:
+            'AD-3: no background isolate handler is ever registered '
+            '(both keys are only added when '
+            'onDidReceiveBackgroundNotificationResponse is passed)',
+      );
+      expect(args.containsKey('callback_handle'), isFalse);
+    });
+  });
+
+  group('notificationTaps: the route into the app', () {
+    test(
+      'a live tap (selectedNotification) adds to notificationTaps',
+      () async {
+        final List<String> received = <String>[];
+        notifier.notificationTaps.listen(received.add);
+        await pumpEventQueue();
+
+        await deliverNotificationResponse(
+          payload: 'dose-1',
+          type: NotificationResponseType.selectedNotification,
+        );
+        await pumpEventQueue();
+
+        expect(received, <String>['dose-1']);
+      },
+    );
+
+    test(
+      'a dismissal (notificationDismissed) does not add to notificationTaps',
+      () async {
+        final List<String> received = <String>[];
+        notifier.notificationTaps.listen(received.add);
+        await pumpEventQueue();
+
+        await deliverNotificationResponse(
+          payload: 'dose-1',
+          type: NotificationResponseType.notificationDismissed,
+        );
+        await pumpEventQueue();
+
+        expect(
+          received,
+          isEmpty,
+          reason:
+              'dismissing the notification without opening the app must do '
+              'nothing further',
+        );
+      },
+    );
+
+    test('getNotificationAppLaunchDetails reporting didNotificationLaunchApp: '
+        'true seeds the stream before any listener attaches, and the buffered '
+        'event is still delivered once one does', () async {
+      launchDetailsResponse = <Object?, Object?>{
+        'notificationLaunchedApp': true,
+        'notificationResponse': <Object?, Object?>{
+          'notificationId': 1,
+          'actionId': null,
+          'input': null,
+          'payload': 'dose-cold-launch',
+          'notificationResponseType':
+              NotificationResponseType.selectedNotification.index,
+        },
+      };
+
+      // Accessing the getter is what triggers the cold-launch check
+      // (lazily, per the adapter's own doc comment) -- no listener attaches
+      // yet, so the event this seeds must be buffered rather than dropped.
+      final Stream<String> taps = notifier.notificationTaps;
+      await pumpEventQueue();
+
+      final List<String> received = <String>[];
+      taps.listen(received.add);
+      await pumpEventQueue();
+
+      expect(received, <String>['dose-cold-launch']);
+    });
+
+    test(
+      'no cold-launch details: notificationTaps stays empty until a live tap',
+      () async {
+        final List<String> received = <String>[];
+        notifier.notificationTaps.listen(received.add);
+        await pumpEventQueue();
+
+        expect(received, isEmpty);
+      },
+    );
   });
 }

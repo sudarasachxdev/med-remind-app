@@ -69,6 +69,19 @@ abstract interface class DoseNotifier {
   /// cancelled, or never scheduled) succeeds without effect, matching
   /// `DoseRepository.deleteDose`'s own idempotence.
   Future<void> cancelPending(String doseId);
+
+  /// Emits a tapped notification's `doseId`, once per tap (Story 3.3, the
+  /// route into the app).
+  ///
+  /// A tap is this port's third lifecycle event, alongside [schedule] and
+  /// [cancelPending] -- not an unrelated concern needing its own port. A
+  /// dismissal is never emitted here: the app must do nothing when the user
+  /// dismisses a notification without opening it, and this stream is
+  /// tap-only by construction, not by a filter a caller has to apply.
+  ///
+  /// `notification_tap_provider.dart`'s `notificationTapProvider` is this
+  /// stream's one intended listener.
+  Stream<String> get notificationTaps;
 }
 
 /// A [DoseNotifier] that schedules and cancels nothing, successfully.
@@ -91,4 +104,7 @@ final class NoOpDoseNotifier implements DoseNotifier {
 
   @override
   Future<void> cancelPending(String doseId) async {}
+
+  @override
+  Stream<String> get notificationTaps => const Stream<String>.empty();
 }

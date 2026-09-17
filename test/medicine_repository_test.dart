@@ -345,6 +345,7 @@ void main() {
       () async {
         final Medicine medicine = await addMedicine();
         await repository.addSchedule(
+          remindersEnabled: true,
           medicineId: medicine.id,
           timeOfDay: '08:00',
           ianaTimezone: 'Asia/Colombo',
@@ -371,6 +372,7 @@ void main() {
             'interval_days',
             'dosage_amount',
             'reminder_override',
+            'reminders_enabled',
           ]),
           reason: 'the stored row has no second representation of the time',
         );
@@ -380,6 +382,7 @@ void main() {
     test('the frequency is stored by name, not by index', () async {
       final Medicine medicine = await addMedicine();
       await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -404,6 +407,7 @@ void main() {
     test('a day set is stored ascending and comes back as a set', () async {
       final Medicine medicine = await addMedicine();
       final Schedule saved = await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -427,6 +431,7 @@ void main() {
       () async {
         final Medicine medicine = await addMedicine();
         await repository.addSchedule(
+          remindersEnabled: true,
           medicineId: medicine.id,
           timeOfDay: '08:00',
           ianaTimezone: 'Asia/Colombo',
@@ -451,6 +456,7 @@ void main() {
       () async {
         final Medicine medicine = await addMedicine();
         await repository.addSchedule(
+          remindersEnabled: true,
           medicineId: medicine.id,
           timeOfDay: '20:30',
           ianaTimezone: 'Europe/London',
@@ -473,6 +479,7 @@ void main() {
       final Medicine medicine = await addMedicine();
       for (final String time in <String>['20:00', '08:00', '13:30']) {
         await repository.addSchedule(
+          remindersEnabled: true,
           medicineId: medicine.id,
           timeOfDay: time,
           ianaTimezone: 'Asia/Colombo',
@@ -502,6 +509,7 @@ void main() {
       Frequency frequency = Frequency.everyDay,
       Set<int>? days,
     }) => repository.addSchedule(
+      remindersEnabled: true,
       medicineId: medicineId,
       timeOfDay: time,
       ianaTimezone: 'Asia/Colombo',
@@ -676,6 +684,7 @@ void main() {
       () async {
         final Medicine medicine = await addMedicine();
         final Schedule ghost = Schedule(
+          remindersEnabled: true,
           id: 'never-stored',
           medicineId: medicine.id,
           timeOfDay: '08:00',
@@ -803,6 +812,7 @@ void main() {
       final Medicine medicine = await addMedicine();
       for (final String time in <String>['08:00', '20:00']) {
         await repository.addSchedule(
+          remindersEnabled: true,
           medicineId: medicine.id,
           timeOfDay: time,
           ianaTimezone: 'Asia/Colombo',
@@ -855,6 +865,7 @@ void main() {
       final Medicine kept = await addMedicine(name: 'Kept');
       for (final Medicine medicine in <Medicine>[doomed, kept]) {
         await repository.addSchedule(
+          remindersEnabled: true,
           medicineId: medicine.id,
           timeOfDay: '08:00',
           ianaTimezone: 'Asia/Colombo',
@@ -898,6 +909,7 @@ void main() {
         startDate: DateTime(2026, 9, 7),
       );
       await writer.addSchedule(
+        remindersEnabled: true,
         medicineId: saved.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -905,6 +917,7 @@ void main() {
         dosageAmount: 1,
       );
       await writer.addSchedule(
+        remindersEnabled: true,
         medicineId: saved.id,
         timeOfDay: '20:00',
         ianaTimezone: 'Asia/Colombo',
@@ -975,6 +988,7 @@ void main() {
       );
 
       final Schedule schedule = await real.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1160,6 +1174,7 @@ void main() {
       // Four rejections above prove nothing if the read path is simply broken.
       final Medicine medicine = await addMedicine();
       await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1186,6 +1201,7 @@ void main() {
 
       await expectLater(
         repository.addSchedule(
+          remindersEnabled: true,
           medicineId: 'no-such-medicine',
           timeOfDay: '08:00',
           ianaTimezone: 'Asia/Colombo',
@@ -1215,6 +1231,7 @@ void main() {
       // reached it.
       await addMedicine(name: 'Something else');
       final Schedule orphan = Schedule(
+        remindersEnabled: true,
         id: 'some-schedule',
         medicineId: 'no-such-medicine',
         timeOfDay: '08:00',
@@ -1274,6 +1291,7 @@ void main() {
       final Medicine from = await addMedicine(name: 'From');
       final Medicine to = await addMedicine(name: 'To');
       final Schedule schedule = await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: from.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1282,6 +1300,7 @@ void main() {
       );
 
       final Schedule moved = Schedule(
+        remindersEnabled: true,
         id: schedule.id,
         medicineId: to.id,
         timeOfDay: schedule.timeOfDay,
@@ -1312,6 +1331,7 @@ void main() {
       // The positive control for the check above.
       final Medicine medicine = await addMedicine();
       final Schedule schedule = await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1551,6 +1571,7 @@ void main() {
       recorder.clear();
 
       await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1582,6 +1603,7 @@ void main() {
     test('saveSchedule: begin, the checks, the update, commit', () async {
       final Medicine medicine = await addMedicine();
       final Schedule schedule = await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1607,6 +1629,7 @@ void main() {
     test('a rejected addSchedule rolls back rather than committing', () async {
       final Medicine medicine = await addMedicine();
       await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1617,6 +1640,7 @@ void main() {
 
       await expectLater(
         repository.addSchedule(
+          remindersEnabled: true,
           medicineId: medicine.id,
           timeOfDay: '08:00',
           ianaTimezone: 'Asia/Colombo',
@@ -1675,6 +1699,7 @@ void main() {
       // explicitly by driving the generator.
       nextId = 8; // the next mint is 'id-9'
       await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',
@@ -1684,6 +1709,7 @@ void main() {
       );
       nextId = 1; // the next mint is 'id-2'
       await repository.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: 'Asia/Colombo',

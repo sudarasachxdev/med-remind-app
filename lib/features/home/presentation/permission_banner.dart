@@ -3,6 +3,15 @@
 // empty, not hidden, not in the tree at all, matching `OverdueBanner`'s own
 // "banner absent entirely" contract.
 //
+// [PermissionBannerReason] (Story 3.3, AD-14): a second, milder degradation --
+// notifications are allowed but Android's exact-alarm permission is not --
+// reuses this same widget shape rather than a second banner component. The
+// two reasons are mutually exclusive at the call site (`home_screen.dart`'s
+// own conditional): full denial is strictly worse and takes priority, so the
+// two are never shown at once, and this widget itself does not need to know
+// that -- it always renders exactly one banner for whichever reason it was
+// given.
+//
 // THE ICON TILE AND TITLE/BODY STACK are `OverdueBanner`'s own shape, reused
 // for the reason that banner's own file comment gives for the mock's: a
 // capability-level degradation and an item-level one read as siblings, not as
@@ -31,12 +40,36 @@ import '../../../domain/port/permission_gateway.dart';
 import '../../../shared/design/design.dart';
 import 'home_copy.dart';
 
-/// The notification-permission banner. Callers are expected to omit this
-/// widget entirely when `HomePlan.notificationsDenied` is false -- it does
-/// not render an empty or invisible state of its own (`home_screen.dart`'s
-/// own conditional, mirroring `OverdueBanner`'s).
+/// Which degradation [PermissionBanner] is reporting.
+///
+/// Exactly two, matching `HomePlan`'s own two boolean fields
+/// (`notificationsDenied`, `exactAlarmsDenied`) -- there is no third
+/// permission this product reads through `PermissionGateway` that would need
+/// a banner of its own.
+enum PermissionBannerReason {
+  /// Full denial (Story 3.1b): no primary reminder fires at all.
+  /// [HomeCopy.permissionBannerTitle]/[HomeCopy.permissionBannerBody],
+  /// unchanged since that story.
+  notificationsDenied,
+
+  /// Exact-alarm denial (AD-14, Story 3.3): reminders still fire, but the OS
+  /// may batch one into its next Doze/idle wake window, arriving somewhat
+  /// later than scheduled. [HomeCopy.exactAlarmBannerTitle]/
+  /// [HomeCopy.exactAlarmBannerBody] -- deliberately milder, never claiming
+  /// "will not fire" (see this file's own header comment).
+  exactAlarmsDenied,
+}
+
+/// The permission banner. Callers are expected to omit this widget entirely
+/// when neither `HomePlan.notificationsDenied` nor
+/// `HomePlan.exactAlarmsDenied` applies -- it does not render an empty or
+/// invisible state of its own (`home_screen.dart`'s own conditional,
+/// mirroring `OverdueBanner`'s).
 class PermissionBanner extends ConsumerStatefulWidget {
-  const PermissionBanner({super.key});
+  const PermissionBanner({super.key, required this.reason});
+
+  /// Which degradation this instance reports. See [PermissionBannerReason].
+  final PermissionBannerReason reason;
 
   @override
   ConsumerState<PermissionBanner> createState() => _PermissionBannerState();
@@ -54,6 +87,18 @@ class _PermissionBannerState extends ConsumerState<PermissionBanner> {
   @override
   Widget build(BuildContext context) {
     if (_dismissed) return const SizedBox.shrink();
+
+    final bool exactAlarmsDenied =
+        widget.reason == PermissionBannerReason.exactAlarmsDenied;
+    final IconData icon = exactAlarmsDenied
+        ? Icons.schedule_outlined
+        : Icons.notifications_off;
+    final String title = exactAlarmsDenied
+        ? HomeCopy.exactAlarmBannerTitle
+        : HomeCopy.permissionBannerTitle;
+    final String body = exactAlarmsDenied
+        ? HomeCopy.exactAlarmBannerBody
+        : HomeCopy.permissionBannerBody;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -76,14 +121,10 @@ class _PermissionBannerState extends ConsumerState<PermissionBanner> {
                   Radius.circular(MTRadius.sm),
                 ),
               ),
-              child: const SizedBox(
+              child: SizedBox(
                 width: _iconTileSize,
                 height: _iconTileSize,
-                child: Icon(
-                  Icons.notifications_off,
-                  size: _iconSize,
-                  color: MTColors.inkMuted,
-                ),
+                child: Icon(icon, size: _iconSize, color: MTColors.inkMuted),
               ),
             ),
             const SizedBox(width: MTSpacing.s3),
@@ -96,15 +137,13 @@ class _PermissionBannerState extends ConsumerState<PermissionBanner> {
                   // settings link and dismiss control below would split one
                   // fact across three stops instead of one.
                   Semantics(
-                    label:
-                        '${HomeCopy.permissionBannerTitle} '
-                        '${HomeCopy.permissionBannerBody}',
+                    label: '$title $body',
                     excludeSemantics: true,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          HomeCopy.permissionBannerTitle,
+                          title,
                           style: MTTypography.body.copyWith(
                             color: MTColors.inkSecondary,
                             fontWeight: FontWeight.w700,
@@ -112,7 +151,7 @@ class _PermissionBannerState extends ConsumerState<PermissionBanner> {
                         ),
                         const SizedBox(height: MTSpacing.s1),
                         Text(
-                          HomeCopy.permissionBannerBody,
+                          body,
                           style: MTTypography.meta.copyWith(
                             color: MTColors.inkFaint,
                           ),

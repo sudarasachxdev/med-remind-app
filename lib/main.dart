@@ -68,9 +68,13 @@ Future<void> main() async {
   // alongside `clock`.
   const PermissionGateway permissionGateway =
       FlutterLocalNotificationsPermissionGateway();
-  // AD-6/AD-7's real notification adapter (Story 3.2). Owns nothing and
-  // opens nothing, exactly like `permissionGateway` above.
-  const DoseNotifier doseNotifier = FlutterLocalNotificationsDoseNotifier();
+  // AD-6/AD-7's real notification adapter (Story 3.2), reading exact-alarm
+  // permission from `permissionGateway` on every schedule call (AD-14, Story
+  // 3.3). Owns nothing and opens nothing, exactly like `permissionGateway`
+  // above.
+  final DoseNotifier doseNotifier = FlutterLocalNotificationsDoseNotifier(
+    permissionGateway: permissionGateway,
+  );
 
   // Closes the database when the OS tears the app down. The return value is
   // discarded on purpose: the listener registers itself with the

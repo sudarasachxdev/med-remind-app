@@ -142,6 +142,9 @@ abstract interface class MedicineRepository {
   ///     The foreign key would reject it anyway; this names what happened.
   ///
   /// In all three cases nothing is written.
+  ///
+  /// [remindersEnabled] is required, matching [dosageAmount]'s own treatment
+  /// -- not optional, since `AddMedicineDraft` always has a value (FR-11).
   Future<Schedule> addSchedule({
     required String medicineId,
     required String timeOfDay,
@@ -151,6 +154,7 @@ abstract interface class MedicineRepository {
     int? intervalDays,
     required double dosageAmount,
     String? reminderOverride,
+    required bool remindersEnabled,
   });
 
   /// Writes [schedule] over the stored row of the same id.

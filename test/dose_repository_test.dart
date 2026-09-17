@@ -75,6 +75,7 @@ void main() {
       startDate: DateTime(2026, 9, 7),
     );
     return medicines.addSchedule(
+      remindersEnabled: true,
       medicineId: medicine.id,
       timeOfDay: '08:00',
       ianaTimezone: 'Asia/Colombo',
@@ -329,6 +330,7 @@ void main() {
         startDate: DateTime(2026, 9, 7),
       );
       final Schedule keptSchedule = await medicines.addSchedule(
+        remindersEnabled: true,
         medicineId: kept.id,
         timeOfDay: '20:00',
         ianaTimezone: 'Asia/Colombo',
@@ -412,6 +414,7 @@ void main() {
         startDate: DateTime(2026, 9, 7),
       );
       final Schedule secondSchedule = await medicines.addSchedule(
+        remindersEnabled: true,
         medicineId: second.id,
         timeOfDay: '09:00',
         ianaTimezone: 'Asia/Colombo',

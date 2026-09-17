@@ -80,6 +80,7 @@ void main() {
       startDate: DateTime(2026, 8, 1),
     );
     schedule = await medicines.addSchedule(
+      remindersEnabled: true,
       medicineId: medicine.id,
       timeOfDay: '08:00',
       ianaTimezone: 'Asia/Colombo',

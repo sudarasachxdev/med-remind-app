@@ -1,5 +1,5 @@
 // The migration half of AD-15: an installed database, at whatever version it
-// was last opened at, becomes version 3 without losing a row, and every way of
+// was last opened at, becomes version 4 without losing a row, and every way of
 // arriving at a given version agrees with every other.
 //
 // `test/db_schema_test.dart` pins what the schema IS. This file pins how an
@@ -7,21 +7,23 @@
 // can be answered against real historical snapshots: the fixtures under
 // `drift_schemas/` were dumped by `drift_dev schema dump` from the code as it
 // stood at the time -- v1 from the version Story 1.3 shipped, v2 from Story
-// 1.4's, v3 from this story's -- so the v1 and v2 databases these tests start
-// from are the ones on a user's phone rather than the ones today's Dart would
-// create. A fixture regenerated from current code would make every test below
-// vacuous -- it would compare the new schema with itself -- which is why `the
-// v1 fixture is still Story 1.3's` reads the JSON and asserts its contents.
+// 1.4's, v3 from Story 1.7a's, v4 from this story's (Story 3.3, adding
+// `Schedules.remindersEnabled`) -- so the v1, v2 and v3 databases these tests
+// start from are the ones on a user's phone rather than the ones today's Dart
+// would create. A fixture regenerated from current code would make every test
+// below vacuous -- it would compare the new schema with itself -- which is why
+// `the v1 fixture is still Story 1.3's` (and its v2 and v3 siblings) reads the
+// JSON and asserts its contents.
 //
-// Two paths reach v3 and both must exist for EVERY prior version, not just the
-// most recent one (the spec's "Both paths agree"): `onCreate` for a fresh
+// Three paths reach v4 and all must exist for EVERY prior version, not just
+// the most recent one (the spec's "Both paths agree"): `onCreate` for a fresh
 // install, and `onUpgrade` for an existing one -- and `onUpgrade` is called
 // EXACTLY ONCE per open, with the full (storedVersion, schemaVersion) span
 // (see `app_database.dart`'s `onUpgrade` for where this was measured), so a
-// real v1 install reaches v3 in one step, not via an intermediate v2 nobody's
-// `onUpgrade` call ever sees. Rewriting `onCreate` to include the new tables
-// INSTEAD of migrating would pass a naive schema test and hard-fail every
-// phone that already has the app.
+// real v1 install reaches v4 in one step, not via an intermediate v2 or v3
+// nobody's `onUpgrade` call ever sees. Rewriting `onCreate` to include the new
+// column INSTEAD of migrating would pass a naive schema test and hard-fail
+// every phone that already has the app.
 //
 // ---------------------------------------------------------------------------
 // REGENERATING THE FIXTURES -- read before you do.
@@ -67,6 +69,7 @@ import 'package:med_remind_app/data/db/app_database.dart';
 import 'generated_migrations/schema.dart';
 import 'generated_migrations/schema_v1.dart' as v1;
 import 'generated_migrations/schema_v2.dart' as v2;
+import 'generated_migrations/schema_v3.dart' as v3;
 
 /// This build, but claiming a schema version no migration step reaches.
 ///
@@ -78,13 +81,13 @@ import 'generated_migrations/schema_v2.dart' as v2;
 /// makes the branch observable without waiting for some future story to add
 /// one -- and it exercises the real `migration` getter, not a copy of its
 /// logic. Story 1.7a's own comment above `_AppDatabaseClaimingVersion3`
-/// foresaw this: the class now claims 4, one past the 3 this story made real,
-/// exactly as it predicted a later story would have to.
-final class _AppDatabaseClaimingVersion4 extends AppDatabase {
-  _AppDatabaseClaimingVersion4(super.executor);
+/// foresaw this and its own successor predicted a further one -- the class now
+/// claims 5, one past the 4 this story made real, exactly as expected.
+final class _AppDatabaseClaimingVersion5 extends AppDatabase {
+  _AppDatabaseClaimingVersion5(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 }
 
 void main() {
@@ -158,16 +161,52 @@ void main() {
       );
     });
 
-    test('all three versions are known to the helper', () {
-      expect(GeneratedHelper.versions, equals(<int>[1, 2, 3]));
+    test('the v3 fixture is still Story 1.7a\'s, not a copy of today\'s', () {
+      // The same manual check again, for this story's own column: `schedules`
+      // must NOT carry `reminders_enabled` in the v3 fixture, or every
+      // "3 -> 4" test below starts from the schema it is trying to prove the
+      // migration produces.
+      final File fixture = File('drift_schemas/drift_schema_v3.json');
+      final Map<String, Object?> json =
+          jsonDecode(fixture.readAsStringSync()) as Map<String, Object?>;
+      final Map<String, Object?> schedulesData =
+          (json['entities']! as List<Object?>)
+              .map(
+                (Object? entity) =>
+                    (entity! as Map<String, Object?>)['data']!
+                        as Map<String, Object?>,
+              )
+              .singleWhere(
+                (Map<String, Object?> data) => data['name'] == 'schedules',
+              );
+      final List<String> columnNames =
+          (schedulesData['columns']! as List<Object?>)
+              .map(
+                (Object? column) =>
+                    (column! as Map<String, Object?>)['name']! as String,
+              )
+              .toList();
+
+      expect(
+        columnNames,
+        isNot(contains('reminders_enabled')),
+        reason:
+            'A v3 fixture already carrying `reminders_enabled` was dumped '
+            'from this story\'s code and makes every "3 -> 4" migration '
+            'test in this file vacuous.',
+      );
+    });
+
+    test('all four versions are known to the helper', () {
+      expect(GeneratedHelper.versions, equals(<int>[1, 2, 3, 4]));
     });
   });
 
-  group('1 -> 3 (a v1 install updating straight to this build)', () {
-    test('migrating a real v1 database yields the v3 schema', () async {
+  group('1 -> 4 (a v1 install updating straight to this build)', () {
+    test('migrating a real v1 database yields the v4 schema', () async {
       // The heart of AD-15. `migrateAndValidate` opens the database, runs the
       // real `migration` strategy, then reads `sqlite_schema` back and
-      // compares it against the v3 fixture -- so this asserts the migration
+      // compares it against the v4 fixture -- so this asserts the migration
       // produced the schema, rather than asserting that it ran.
       final DatabaseConnection connection = await verifier.startAt(1);
       final AppDatabase database = AppDatabase(connection);
@@ -175,7 +214,7 @@ void main() {
 
       await verifier.migrateAndValidate(
         database,
-        3,
+        4,
         // Strict: a table, view or trigger left behind by the migration fails
         // too, not only a missing one. Off by default, and Story 1.4 was the
         // one that decided whether migration discipline is real.
@@ -218,7 +257,7 @@ void main() {
       final List<QueryRow> version = await migrated
           .customSelect('PRAGMA user_version')
           .get();
-      expect(version.single.data['user_version'], 3);
+      expect(version.single.data['user_version'], 4);
 
       for (final String table in <String>['medicines', 'schedules', 'doses']) {
         final List<QueryRow> rows = await migrated
@@ -228,14 +267,47 @@ void main() {
               variables: <Variable<Object>>[Variable<String>(table)],
             )
             .get();
-        expect(rows, hasLength(1), reason: '$table should exist after 1 -> 3');
+        expect(rows, hasLength(1), reason: '$table should exist after 1 -> 4');
       }
+    });
+
+    test('a fresh row (from this build\'s onCreate path) has remindersEnabled '
+        'true, and 1 -> 4 gives the same schema `createTable(schedules)` builds '
+        'on this path', () async {
+      // `createTable(schedules)` in the 1 -> 4 branch builds from TODAY's
+      // `Schedules` definition, which already carries `remindersEnabled` --
+      // no separate `addColumn` call exists for it in that branch (see
+      // `app_database.dart`'s own comment). This proves the column is
+      // really there and really defaults to `true`, not merely that the
+      // fixture comparison above happened to tolerate its absence.
+      final DatabaseConnection connection = await verifier.startAt(1);
+      final AppDatabase migrated = AppDatabase(connection);
+      addTearDown(migrated.close);
+
+      await migrated.customStatement(
+        "INSERT INTO medicines (id, name, glyph_index, form, "
+        "dosage_amount, dosage_unit, start_date) VALUES ('m1', "
+        "'Metformin', 0, 'tablet', 1.0, 'tablet', '2026-09-07')",
+      );
+      await migrated.customStatement(
+        "INSERT INTO schedules (id, medicine_id, time_of_day, "
+        "iana_timezone, frequency, dosage_amount) VALUES ('s1', 'm1', "
+        "'08:00', 'Asia/Colombo', 'everyDay', 1.0)",
+      );
+
+      final List<QueryRow> rows = await migrated
+          .customSelect(
+            'SELECT reminders_enabled FROM schedules WHERE id = ?',
+            variables: <Variable<Object>>[Variable<String>('s1')],
+          )
+          .get();
+      expect(rows.single.data['reminders_enabled'], 1);
     });
 
     test('the migrated schema is identical to a fresh one', () async {
       // The spec's "Both paths agree" row, asserted directly rather than
       // through the fixture: the CREATE statements SQLite itself holds for a
-      // database born at 3 and for one that walked 1 -> 3, compared as text.
+      // database born at 4 and for one that walked 1 -> 4, compared as text.
       //
       // `migrateAndValidate` above compares each path against the fixture,
       // which is the stronger check of the two in one direction and says
@@ -263,69 +335,130 @@ void main() {
     });
   });
 
-  group('2 -> 3 (the spec\'s "Migration v2 -> v3" row)', () {
-    test('migrating a real v2 database yields the v3 schema', () async {
+  group('2 -> 4 (a v2 install updating straight to this build)', () {
+    test('migrating a real v2 database yields the v4 schema', () async {
       final DatabaseConnection connection = await verifier.startAt(2);
       final AppDatabase database = AppDatabase(connection);
       addTearDown(database.close);
 
       await verifier.migrateAndValidate(
         database,
-        3,
+        4,
         options: const ValidationOptions(validateDropped: true),
       );
     });
 
-    test(
-      'a Medicine and Schedule written under v2 are still readable',
-      () async {
-        // The spec's own wording for this row. Distinct from the fixture
-        // comparison above: that proves the SHAPE survives, this proves a
-        // REAL ROW written before the migration reads back unchanged after it
-        // -- schema equality alone would not catch a migration that happened
-        // to recreate `medicines` empty on its way to adding `doses`.
-        final InitializedSchema schema = await verifier.schemaAt(2);
-        addTearDown(schema.close);
+    test('a Medicine and Schedule written under v2 are still readable, and the '
+        'new column defaults to true on the pre-existing row', () async {
+      // The spec's own wording for this row. Distinct from the fixture
+      // comparison above: that proves the SHAPE survives, this proves a
+      // REAL ROW written before the migration reads back unchanged after it
+      // -- schema equality alone would not catch a migration that happened
+      // to recreate `medicines` empty on its way to adding `doses`.
+      final InitializedSchema schema = await verifier.schemaAt(2);
+      addTearDown(schema.close);
 
-        final v2.DatabaseAtV2 old = v2.DatabaseAtV2(schema.newConnection());
-        await old.customStatement(
-          "INSERT INTO medicines (id, name, glyph_index, form, "
-          "dosage_amount, dosage_unit, start_date) VALUES ('m1', "
-          "'Metformin', 0, 'tablet', 1.0, 'tablet', '2026-09-07')",
-        );
-        await old.customStatement(
-          "INSERT INTO schedules (id, medicine_id, time_of_day, "
-          "iana_timezone, frequency, dosage_amount) VALUES ('s1', 'm1', "
-          "'08:00', 'Asia/Colombo', 'everyDay', 1.0)",
-        );
-        await old.close();
+      final v2.DatabaseAtV2 old = v2.DatabaseAtV2(schema.newConnection());
+      await old.customStatement(
+        "INSERT INTO medicines (id, name, glyph_index, form, "
+        "dosage_amount, dosage_unit, start_date) VALUES ('m1', "
+        "'Metformin', 0, 'tablet', 1.0, 'tablet', '2026-09-07')",
+      );
+      await old.customStatement(
+        "INSERT INTO schedules (id, medicine_id, time_of_day, "
+        "iana_timezone, frequency, dosage_amount) VALUES ('s1', 'm1', "
+        "'08:00', 'Asia/Colombo', 'everyDay', 1.0)",
+      );
+      await old.close();
 
-        final AppDatabase migrated = AppDatabase(schema.newConnection());
-        addTearDown(migrated.close);
+      final AppDatabase migrated = AppDatabase(schema.newConnection());
+      addTearDown(migrated.close);
 
-        final List<QueryRow> medicines = await migrated
-            .customSelect(
-              'SELECT * FROM medicines WHERE id = ?',
-              variables: <Variable<Object>>[Variable<String>('m1')],
-            )
-            .get();
-        expect(medicines.single.data['name'], 'Metformin');
+      final List<QueryRow> medicines = await migrated
+          .customSelect(
+            'SELECT * FROM medicines WHERE id = ?',
+            variables: <Variable<Object>>[Variable<String>('m1')],
+          )
+          .get();
+      expect(medicines.single.data['name'], 'Metformin');
 
-        final List<QueryRow> schedules = await migrated
-            .customSelect(
-              'SELECT * FROM schedules WHERE id = ?',
-              variables: <Variable<Object>>[Variable<String>('s1')],
-            )
-            .get();
-        expect(schedules.single.data['time_of_day'], '08:00');
-        expect(schedules.single.data['medicine_id'], 'm1');
+      final List<QueryRow> schedules = await migrated
+          .customSelect(
+            'SELECT * FROM schedules WHERE id = ?',
+            variables: <Variable<Object>>[Variable<String>('s1')],
+          )
+          .get();
+      expect(schedules.single.data['time_of_day'], '08:00');
+      expect(schedules.single.data['medicine_id'], 'm1');
+      expect(
+        schedules.single.data['reminders_enabled'],
+        1,
+        reason:
+            'a pre-existing v2 row gained the column via addColumn, which '
+            'must carry the same true default a fresh install would',
+      );
 
-        final List<QueryRow> version = await migrated
-            .customSelect('PRAGMA user_version')
-            .get();
-        expect(version.single.data['user_version'], 3);
-      },
-    );
+      final List<QueryRow> version = await migrated
+          .customSelect('PRAGMA user_version')
+          .get();
+      expect(version.single.data['user_version'], 4);
+    });
+  });
+
+  group('3 -> 4 (the spec\'s own "Migration v3 -> v4" row)', () {
+    test('migrating a real v3 database yields the v4 schema', () async {
+      final DatabaseConnection connection = await verifier.startAt(3);
+      final AppDatabase database = AppDatabase(connection);
+      addTearDown(database.close);
+
+      await verifier.migrateAndValidate(
+        database,
+        4,
+        options: const ValidationOptions(validateDropped: true),
+      );
+    });
+
+    test('a Schedule written under v3 (no reminders_enabled column yet) reads '
+        'back with the column defaulted to true', () async {
+      final InitializedSchema schema = await verifier.schemaAt(3);
+      addTearDown(schema.close);
+
+      final v3.DatabaseAtV3 old = v3.DatabaseAtV3(schema.newConnection());
+      await old.customStatement(
+        "INSERT INTO medicines (id, name, glyph_index, form, "
+        "dosage_amount, dosage_unit, start_date) VALUES ('m1', "
+        "'Metformin', 0, 'tablet', 1.0, 'tablet', '2026-09-07')",
+      );
+      await old.customStatement(
+        "INSERT INTO schedules (id, medicine_id, time_of_day, "
+        "iana_timezone, frequency, dosage_amount) VALUES ('s1', 'm1', "
+        "'08:00', 'Asia/Colombo', 'everyDay', 1.0)",
+      );
+      await old.close();
+
+      final AppDatabase migrated = AppDatabase(schema.newConnection());
+      addTearDown(migrated.close);
+
+      final List<QueryRow> schedules = await migrated
+          .customSelect(
+            'SELECT * FROM schedules WHERE id = ?',
+            variables: <Variable<Object>>[Variable<String>('s1')],
+          )
+          .get();
+      expect(schedules.single.data['time_of_day'], '08:00');
+      expect(
+        schedules.single.data['reminders_enabled'],
+        1,
+        reason:
+            'FR-11: a Schedule saved before this story shipped meant '
+            '"reminders on" -- the migration must not silently opt it out',
+      );
+
+      final List<QueryRow> version = await migrated
+          .customSelect('PRAGMA user_version')
+          .get();
+      expect(version.single.data['user_version'], 4);
+    });
   });
 
   group('a gap with no migration step (the spec\'s "Version gap" row)', () {
@@ -345,7 +478,7 @@ void main() {
       await old.close();
       final int sizeBefore = file.lengthSync();
 
-      final AppDatabase build = _AppDatabaseClaimingVersion4(
+      final AppDatabase build = _AppDatabaseClaimingVersion5(
         NativeDatabase(file),
       );
       addTearDown(build.close);
@@ -362,7 +495,7 @@ void main() {
               .having(
                 (AppDatabaseVersionMismatch e) => e.appVersion,
                 'appVersion',
-                4,
+                5,
               )
               .having(
                 (AppDatabaseVersionMismatch e) => e.isDowngrade,
@@ -395,24 +528,31 @@ void main() {
       // A reviewer widening one to `if (from < to)` would make every future
       // gap a silent no-op -- the app would then run against whatever schema
       // it found. This asserts the negative for every pair this build does
-      // NOT cover, now that `1 -> 3` and `2 -> 3` are the two that it does.
+      // NOT cover, now that `1 -> 4`, `2 -> 4` and `3 -> 4` are the three that
+      // it does.
       //
-      // `1 -> 2` is in this list on purpose: it was the covered step through
-      // Story 1.4 through 1.6, and this story retired it rather than adding
-      // to it, because `onUpgrade`'s `to` can now only ever be 3 (see the
-      // header comment). A gap this build will never actually be asked for is
-      // still worth naming here, so a future reviewer re-widening the
-      // migration to accept it again fails a test rather than shipping
-      // silently.
+      // `1 -> 2` and `1 -> 3`/`2 -> 3` are in this list on purpose: `1 -> 2`
+      // was the covered step through Story 1.4 through 1.6, and `1 -> 3`/
+      // `2 -> 3` were the covered steps through Story 1.7a through Story 3.2.
+      // This story retired all three rather than adding to them, because
+      // `onUpgrade`'s `to` can now only ever be 4 (see the header comment). A
+      // gap this build will never actually be asked for is still worth naming
+      // here, so a future reviewer re-widening the migration to accept it
+      // again fails a test rather than shipping silently.
       final AppDatabase database = AppDatabase(NativeDatabase.memory());
       addTearDown(database.close);
       final Migrator migrator = database.createMigrator();
 
       for (final (int, int) gap in const <(int, int)>[
         (1, 2),
+        (1, 3),
         (2, 1),
+        (2, 3),
         (3, 1),
         (3, 2),
+        (4, 1),
+        (4, 2),
+        (4, 3),
         (5, 9),
       ]) {
         await expectLater(

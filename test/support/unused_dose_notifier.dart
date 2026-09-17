@@ -35,4 +35,7 @@ final class UnusedDoseNotifier implements DoseNotifier {
 
   @override
   Future<void> cancelPending(String doseId) => _unused('cancelPending');
+
+  @override
+  Stream<String> get notificationTaps => _unused('notificationTaps');
 }

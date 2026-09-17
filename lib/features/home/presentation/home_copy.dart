@@ -241,6 +241,24 @@ abstract final class HomeCopy {
   /// accessible name rather than visible text.
   static const String permissionBannerDismiss = 'Dismiss';
 
+  // --- Exact-alarm banner (AD-14, Story 3.3) ---------------------------------------------
+
+  /// The milder sibling of [permissionBannerTitle] -- shown when
+  /// notifications are allowed but Android's exact-alarm permission is not
+  /// (`PermissionBannerReason.exactAlarmsDenied`), never alongside the
+  /// stronger banner (`home_screen.dart`'s conditional: full denial takes
+  /// priority and this one is dropped entirely when it applies).
+  static const String exactAlarmBannerTitle = 'Precise timing is off.';
+
+  /// States the fact, never the stronger banner's claim: exact-alarm denial
+  /// means the OS may batch a reminder into its next Doze/idle wake window,
+  /// arriving somewhat later than scheduled -- never "will not fire", which
+  /// is only true of full notification denial (see this story's Design
+  /// Notes on why the two banners are never shown together).
+  static const String exactAlarmBannerBody =
+      'Reminders may arrive a few minutes late. MediTracker still works as '
+      'a manual tracker.';
+
   // --- Footer -----------------------------------------------------------------------------
 
   /// `EXPERIENCE.md`'s Voice and Tone table, verbatim -- see the file comment
@@ -341,6 +359,8 @@ abstract final class HomeCopy {
     permissionBannerBody,
     permissionBannerSettingsAction,
     permissionBannerDismiss,
+    exactAlarmBannerTitle,
+    exactAlarmBannerBody,
     privacyFootnote,
     emptyStateTitle,
     emptyStateBody,

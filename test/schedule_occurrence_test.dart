@@ -22,6 +22,7 @@ Schedule _schedule({
   daysOfWeek: daysOfWeek,
   intervalDays: intervalDays,
   dosageAmount: 1,
+  remindersEnabled: true,
 );
 
 void main() {

@@ -41,6 +41,7 @@ import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
 import 'package:med_remind_app/domain/port/permission_gateway.dart';
+import 'package:med_remind_app/domain/service/dose_generator.dart';
 import 'package:med_remind_app/features/add_medicine/domain/add_medicine_draft.dart';
 import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_copy.dart';
 import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_screen.dart';
@@ -55,6 +56,7 @@ import 'package:med_remind_app/features/home/presentation/week_strip.dart';
 import 'package:med_remind_app/shared/widgets/mt_toast.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
+import 'support/fake_dose_notifier.dart';
 import 'support/fake_permission_gateway.dart';
 import 'support/fixed_clock.dart';
 
@@ -86,6 +88,7 @@ void main() {
     required String timeOfDay,
   }) async {
     await medicines.addSchedule(
+      remindersEnabled: true,
       medicineId: medicineId,
       timeOfDay: timeOfDay,
       ianaTimezone: FixedClock.defaultZone,
@@ -96,13 +99,18 @@ void main() {
 
   /// Pumps `HomeScreen` over a fresh in-memory database, seeded by [seed]
   /// through the real repositories before the first frame.
-  Future<void> pumpHome(
+  ///
+  /// Returns the [DoseRepository] over that same database, so a test that
+  /// needs a seeded Dose's real (generated) id -- Story 3.3's notification-tap
+  /// group -- can look it up after the first pump rather than guessing it.
+  Future<DoseRepository> pumpHome(
     WidgetTester tester, {
     required Future<void> Function(MedicineRepository medicines) seed,
     DateTime? now,
     double? textScale,
     Size viewport = _referenceFrame,
     PermissionGateway? permissionGateway,
+    DoseNotifier? doseNotifier,
   }) async {
     tester.view.physicalSize = viewport * 3;
     tester.view.devicePixelRatio = 3;
@@ -131,7 +139,9 @@ void main() {
           // of this file's own matrix is about scheduling or cancelling a
           // real notification, so the inert no-op is what every other test
           // written before this story implicitly relied on.
-          doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
+          doseNotifierProvider.overrideWithValue(
+            doseNotifier ?? const NoOpDoseNotifier(),
+          ),
           clockProvider.overrideWithValue(
             FixedClock(instant: now ?? defaultNow),
           ),
@@ -147,6 +157,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    return doses;
   }
 
   /// Pumps `HomeScreen` behind a real, minimal `GoRouter` carrying the same
@@ -260,6 +271,7 @@ void main() {
             // Every 5 days from `defaultStart` (2026-09-07): occurrences fall
             // on the 7th, 12th, 17th... never on `defaultNow`'s the 9th.
             await medicines.addSchedule(
+              remindersEnabled: true,
               medicineId: medicine.id,
               timeOfDay: '08:00',
               ianaTimezone: FixedClock.defaultZone,
@@ -616,6 +628,74 @@ void main() {
         await tester.pump(mtToastDuration);
       },
     );
+  });
+
+  group('the exact-alarm banner (AD-14, this spec\'s own matrix row)', () {
+    testWidgets(
+      'exact alarms denied, notifications allowed -- the milder banner '
+      'shows',
+      (tester) async {
+        await pumpHome(
+          tester,
+          permissionGateway: FakePermissionGateway(
+            notificationsEnabled: true,
+            exactAlarmsAllowed: false,
+          ),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+
+        expect(find.byType(PermissionBanner), findsOneWidget);
+        expect(find.text(HomeCopy.exactAlarmBannerTitle), findsOneWidget);
+        expect(
+          find.text(HomeCopy.permissionBannerTitle),
+          findsNothing,
+          reason: 'the stronger banner\'s copy must not also appear',
+        );
+      },
+    );
+
+    testWidgets(
+      'both denied -- only the stronger (notificationsDenied) banner shows, '
+      'never both at once',
+      (tester) async {
+        await pumpHome(
+          tester,
+          permissionGateway: FakePermissionGateway(
+            notificationsEnabled: false,
+            exactAlarmsAllowed: false,
+          ),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+
+        expect(find.byType(PermissionBanner), findsOneWidget);
+        expect(find.text(HomeCopy.permissionBannerTitle), findsOneWidget);
+        expect(find.text(HomeCopy.exactAlarmBannerTitle), findsNothing);
+      },
+    );
+
+    testWidgets('both allowed -- the banner is absent entirely', (
+      tester,
+    ) async {
+      await pumpHome(
+        tester,
+        permissionGateway: FakePermissionGateway(
+          notificationsEnabled: true,
+          exactAlarmsAllowed: true,
+        ),
+        seed: (medicines) async {
+          final Medicine medicine = await addMedicine(medicines);
+          await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+        },
+      );
+
+      expect(find.byType(PermissionBanner), findsNothing);
+    });
   });
 
   group('the three dose-card variants', () {
@@ -1111,6 +1191,126 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.textContaining(HomeCopy.nothingScheduled), findsOneWidget);
     });
+  });
+
+  group('the route in: a tapped notification opens its Dose\'s action sheet '
+      '(Story 3.3)', () {
+    testWidgets(
+      'plan loaded first, then a tap arrives -- opens the right Dose',
+      (tester) async {
+        final FakeDoseNotifier notifier = FakeDoseNotifier();
+        final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        addTearDown(database.close);
+        final MedicineRepository medicines = DriftMedicineRepository(database);
+        final DoseRepository doses = DriftDoseRepository(database);
+
+        final Medicine medicine = await addMedicine(medicines);
+        await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+        // The plan's own generation step, run for real so the Dose exists
+        // with its true (generated) id before the tap names it.
+        await DoseGenerator(medicines, doses).generate(defaultNow);
+        final Dose seeded = (await doses.dosesScheduledBetween(
+          DateTime(2026, 9, 9),
+          DateTime(2026, 9, 10),
+        )).single;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: <Override>[
+              medicineRepositoryProvider.overrideWithValue(medicines),
+              doseRepositoryProvider.overrideWithValue(doses),
+              doseNotifierProvider.overrideWithValue(notifier),
+              clockProvider.overrideWithValue(FixedClock(instant: defaultNow)),
+              permissionGatewayProvider.overrideWithValue(
+                FakePermissionGateway(),
+              ),
+            ],
+            child: const MaterialApp(home: HomeScreen()),
+          ),
+        );
+        // The plan is fully loaded (this is the "plan first" ordering).
+        await tester.pumpAndSettle();
+        expect(find.text(HomeCopy.sheetTitle('Metformin')), findsNothing);
+
+        notifier.emitTap(seeded.id);
+        await tester.pumpAndSettle();
+
+        expect(find.text(HomeCopy.sheetTitle('Metformin')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a tap arrives before the plan resolves -- opens the right Dose once '
+      'it does, without being skipped',
+      (tester) async {
+        final FakeDoseNotifier notifier = FakeDoseNotifier();
+        final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        addTearDown(database.close);
+        final MedicineRepository medicines = DriftMedicineRepository(database);
+        final DoseRepository doses = DriftDoseRepository(database);
+
+        final Medicine medicine = await addMedicine(medicines);
+        await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+        // Pre-generated (idempotent upsert, AD-10) purely so this test
+        // knows the Dose's real id before `HomePlanController.build()`'s
+        // own generation step -- which the widget below still runs on its
+        // own -- produces the same row.
+        await DoseGenerator(medicines, doses).generate(defaultNow);
+        final Dose seeded = (await doses.dosesScheduledBetween(
+          DateTime(2026, 9, 9),
+          DateTime(2026, 9, 10),
+        )).single;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: <Override>[
+              medicineRepositoryProvider.overrideWithValue(medicines),
+              doseRepositoryProvider.overrideWithValue(doses),
+              doseNotifierProvider.overrideWithValue(notifier),
+              clockProvider.overrideWithValue(FixedClock(instant: defaultNow)),
+              permissionGatewayProvider.overrideWithValue(
+                FakePermissionGateway(),
+              ),
+            ],
+            child: const MaterialApp(home: HomeScreen()),
+          ),
+        );
+        // Exactly one frame: `homePlanControllerProvider` is still
+        // `AsyncLoading` here (`build()` is `async` and its first two lines
+        // are both awaited I/O -- `home_plan_controller.dart`'s own file
+        // comment). The tap below therefore arrives before the plan has
+        // resolved -- the cold-launch ordering this test names.
+        await tester.pump();
+
+        notifier.emitTap(seeded.id);
+        await tester.pumpAndSettle();
+
+        expect(find.text(HomeCopy.sheetTitle('Metformin')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a doseId matching nothing in the current plan is dropped silently '
+      '(this spec\'s own named edge case -- e.g. a deleted Dose)',
+      (tester) async {
+        final FakeDoseNotifier notifier = FakeDoseNotifier();
+
+        await pumpHome(
+          tester,
+          doseNotifier: notifier,
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+
+        notifier.emitTap('schedule-that-never-existed:2026-01-01T00:00:00');
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(BottomSheet), findsNothing);
+      },
+    );
   });
 }
 

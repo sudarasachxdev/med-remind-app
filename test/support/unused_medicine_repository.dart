@@ -66,6 +66,7 @@ final class UnusedMedicineRepository implements MedicineRepository {
     int? intervalDays,
     required double dosageAmount,
     String? reminderOverride,
+    required bool remindersEnabled,
   }) => _unused('addSchedule');
 
   @override

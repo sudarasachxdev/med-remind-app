@@ -82,6 +82,7 @@ void main() {
     double dosageAmount = 1,
     String? reminderOverride,
   }) => medicines.addSchedule(
+    remindersEnabled: true,
     medicineId: medicineId,
     timeOfDay: timeOfDay,
     ianaTimezone: 'Asia/Colombo',

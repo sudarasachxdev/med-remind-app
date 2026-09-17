@@ -64,7 +64,11 @@ void main() {
     DoseRepository doses,
     FakePermissionGateway permissionGateway,
   })
-  buildContainer({DateTime? now, bool notificationsEnabled = true}) {
+  buildContainer({
+    DateTime? now,
+    bool notificationsEnabled = true,
+    bool exactAlarmsAllowed = true,
+  }) {
     final AppDatabase database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
 
@@ -73,6 +77,7 @@ void main() {
     final Clock clock = FixedClock(instant: now ?? defaultNow);
     final FakePermissionGateway permissionGateway = FakePermissionGateway(
       notificationsEnabled: notificationsEnabled,
+      exactAlarmsAllowed: exactAlarmsAllowed,
     );
 
     final ProviderContainer container = ProviderContainer(
@@ -114,6 +119,7 @@ void main() {
     String medicineId, {
     required String timeOfDay,
   }) => medicines.addSchedule(
+    remindersEnabled: true,
     medicineId: medicineId,
     timeOfDay: timeOfDay,
     ianaTimezone: FixedClock.defaultZone,
@@ -214,6 +220,7 @@ void main() {
       // never on `defaultNow`'s the 9th, so today's own list is empty even
       // though the Medicine is a real, saved regimen.
       await c.medicines.addSchedule(
+        remindersEnabled: true,
         medicineId: medicine.id,
         timeOfDay: '08:00',
         ianaTimezone: FixedClock.defaultZone,
@@ -727,4 +734,41 @@ void main() {
       );
     },
   );
+
+  group('exactAlarmsDenied (AD-14, read fresh via PermissionGateway)', () {
+    test('exact alarms allowed -- exactAlarmsDenied is false', () async {
+      final c = buildContainer(exactAlarmsAllowed: true);
+
+      final HomePlan plan = await c.container.read(
+        homePlanControllerProvider.future,
+      );
+
+      expect(plan.exactAlarmsDenied, isFalse);
+    });
+
+    test('exact alarms denied -- exactAlarmsDenied is true', () async {
+      final c = buildContainer(exactAlarmsAllowed: false);
+
+      final HomePlan plan = await c.container.read(
+        homePlanControllerProvider.future,
+      );
+
+      expect(plan.exactAlarmsDenied, isTrue);
+    });
+
+    test('independent of notificationsDenied -- notifications allowed but '
+        'exact alarms denied reports only the milder fact', () async {
+      final c = buildContainer(
+        notificationsEnabled: true,
+        exactAlarmsAllowed: false,
+      );
+
+      final HomePlan plan = await c.container.read(
+        homePlanControllerProvider.future,
+      );
+
+      expect(plan.notificationsDenied, isFalse);
+      expect(plan.exactAlarmsDenied, isTrue);
+    });
+  });
 }

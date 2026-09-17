@@ -51,6 +51,7 @@ final class Schedule {
     this.intervalDays,
     required this.dosageAmount,
     this.reminderOverride,
+    required this.remindersEnabled,
   }) : daysOfWeek = daysOfWeek == null
            ? null
            : Set<int>.unmodifiable(daysOfWeek) {
@@ -139,6 +140,23 @@ final class Schedule {
   /// opaque text here so that the column exists before the policy does and the
   /// schema does not need a second migration to gain it.
   final String? reminderOverride;
+
+  /// Whether a primary reminder notification fires for this Schedule (FR-11).
+  ///
+  /// No default at this layer -- every other required field on this class
+  /// (`timeOfDay`, `ianaTimezone`, `frequency`, `dosageAmount`) has none
+  /// either, and a default here would let a hand-constructed Schedule in a
+  /// future story silently assume "reminders on" the way `Etc/UTC` would have
+  /// silently assumed a timezone (AD-9's own reasoning for refusing exactly
+  /// that shortcut). `AddMedicineDraft` and the schema column each carry
+  /// their own default (`true`) at the layer that actually needs one -- a
+  /// fresh install's very first save, and a pre-Story-3.3 row read back after
+  /// migration.
+  ///
+  /// Gates `ReminderScheduler.schedulePrimary` only: when `false`, no
+  /// notification fires, and the Dose still transitions through Dose States
+  /// correctly (`resolve()` never reads this field).
+  final bool remindersEnabled;
 
   /// The minimum [intervalDays] [Frequency.everyNDays] admits.
   ///
@@ -298,6 +316,7 @@ final class Schedule {
     int? intervalDays,
     double? dosageAmount,
     String? reminderOverride,
+    bool? remindersEnabled,
   }) => Schedule(
     id: id,
     medicineId: medicineId,
@@ -308,6 +327,7 @@ final class Schedule {
     intervalDays: intervalDays ?? this.intervalDays,
     dosageAmount: dosageAmount ?? this.dosageAmount,
     reminderOverride: reminderOverride ?? this.reminderOverride,
+    remindersEnabled: remindersEnabled ?? this.remindersEnabled,
   );
 
   /// Value equality over every field. See `Medicine.==` for why.
@@ -322,7 +342,8 @@ final class Schedule {
       _sameDays(other.daysOfWeek, daysOfWeek) &&
       other.intervalDays == intervalDays &&
       other.dosageAmount == dosageAmount &&
-      other.reminderOverride == reminderOverride;
+      other.reminderOverride == reminderOverride &&
+      other.remindersEnabled == remindersEnabled;
 
   @override
   int get hashCode => Object.hash(
@@ -337,6 +358,7 @@ final class Schedule {
     intervalDays,
     dosageAmount,
     reminderOverride,
+    remindersEnabled,
   );
 
   static bool _sameDays(Set<int>? a, Set<int>? b) {

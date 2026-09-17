@@ -323,6 +323,10 @@ class AddMedicineController extends AutoDisposeNotifier<AddMedicineFlow> {
         // own per-occurrence dose so that "two in the morning, one at night"
         // needs no second Medicine.
         dosageAmount: draft.dosageAmount,
+        // FR-11: the toggle Story 1.5's step 3 UI already reads and writes on
+        // `draft`. Before this story it was read here and never passed to the
+        // repository -- the confirmed gap this story closes.
+        remindersEnabled: draft.remindersEnabled,
       );
     } on DomainFailure catch (failure, stackTrace) {
       await _rollBack(repository, medicine);

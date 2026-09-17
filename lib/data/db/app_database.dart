@@ -1,4 +1,4 @@
-// The application database, at schema version 3.
+// The application database, at schema version 4.
 //
 // AD-3 — one process opens the database. One `AppDatabase` is constructed, in
 // `lib/main.dart`, and handed to the adapters that need it. Nothing else calls
@@ -6,23 +6,28 @@
 // executor.
 //
 // AD-15 — every schema change ships a migration and a schema test. Version 2
-// added [Medicines] and [Schedules]; version 3 (Story 1.7a) adds [Doses]. Both
-// landed by MIGRATING: an installed app already holds a file carrying the
-// user's onboarding flag (and, from v2 onward, real medicines and schedules),
-// and recreating it would be a data-loss bug on the one part of this codebase
-// whose subject is not losing data. So every version has two paths that must
-// agree with each other — `onCreate` builds every table for a fresh install,
-// `onUpgrade` creates only what a given stored version is missing, and
-// `test/db_migration_test.dart` compares the two resulting schemas against
-// drift's generated fixtures rather than asserting they match.
+// added [Medicines] and [Schedules]; version 3 (Story 1.7a) adds [Doses];
+// version 4 (Story 3.3) adds [Schedules.remindersEnabled], closing a
+// pre-existing gap -- FR-11's reminders-disabled toggle was already wired from
+// the add-medicine UI down to `AddMedicineDraft` and silently discarded at the
+// one call site that persists it, because `Schedule`/the schema had nowhere to
+// receive it until now. All three landed by MIGRATING: an installed app
+// already holds a file carrying the user's onboarding flag (and, from v2
+// onward, real medicines and schedules), and recreating it would be a
+// data-loss bug on the one part of this codebase whose subject is not losing
+// data. So every version has two paths that must agree with each other --
+// `onCreate` builds every table for a fresh install, `onUpgrade` creates only
+// what a given stored version is missing, and `test/db_migration_test.dart`
+// compares the two resulting schemas against drift's generated fixtures rather
+// than asserting they match.
 //
 // There is deliberately no `deleteOnFailure`-style recovery: the spine
 // prohibits it (AD-15, AD-18), and a health record with no cloud copy must
 // never be discarded because it failed to open once.
 //
-// This story (1.7a) owns `doses`. `DoseRepository`/`DriftDoseRepository` read
-// and write it; nothing under `lib/features/` or `lib/app/` references either
-// yet -- 1.7b is their first caller.
+// Story 1.7a owns `doses`. `DoseRepository`/`DriftDoseRepository` read and
+// write it. Story 3.3 owns `schedules.reminders_enabled` alone -- no new
+// table, no other column.
 
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -267,6 +272,16 @@ class Schedules extends Table {
   /// to gain it.
   TextColumn get reminderOverride => text().nullable()();
 
+  /// Whether a primary reminder notification fires for this Schedule (FR-11).
+  ///
+  /// Defaults to `true`: a fresh install's very first save, and a
+  /// pre-Story-3.3 row read back after migration, both mean "reminders on"
+  /// -- the behaviour every Schedule had before this column existed. The
+  /// domain's own `Schedule.remindersEnabled` carries no default of its own
+  /// (see that field's doc comment); this is the one layer that needs one.
+  BoolColumn get remindersEnabled =>
+      boolean().withDefault(const Constant(true))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -379,8 +394,8 @@ class Doses extends Table {
   ];
 }
 
-/// The Drift database. Schema version 3: [AppSettings], [Medicines],
-/// [Schedules] and [Doses].
+/// The Drift database. Schema version 4: [AppSettings], [Medicines],
+/// [Schedules] (now with [Schedules.remindersEnabled], Story 3.3) and [Doses].
 @DriftDatabase(tables: [AppSettings, Medicines, Schedules, Doses])
 class AppDatabase extends _$AppDatabase {
   /// Opens the on-device database, or [executor] when one is supplied.
@@ -391,7 +406,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: appDatabaseName));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -424,17 +439,22 @@ class AppDatabase extends _$AppDatabase {
       // named as its own exact pair -- there is no implicit chaining from
       // one step to the next.
       //
-      // `to == 3` for both pairs below because that is this build's only
+      // `to == 4` for all three pairs below because that is this build's only
       // possible value for it; written literally anyway, matching the exact-
       // pair style the 1 -> 2 step used, so a future story adds a pair rather
       // than relaxing one.
-      if (from == 1 && to == 3) {
+      if (from == 1 && to == 4) {
         // A v1 install (Story 1.3) updating straight to this build, having
         // skipped every version in between. `app_settings` is not touched, so
         // the onboarding flag it carries survives untouched. Creates every
-        // table added since v1 -- medicines and schedules (Story 1.4) as well
-        // as doses (Story 1.7a) -- because this callback will not be invoked
-        // again for the versions in between.
+        // table added since v1 -- medicines and schedules (Story 1.4), doses
+        // (Story 1.7a) -- because this callback will not be invoked again for
+        // the versions in between. `createTable(schedules)` builds from
+        // TODAY's `Schedules` definition, which already carries
+        // `remindersEnabled` (Story 3.3) -- there is no separate `addColumn`
+        // call for it here, unlike the 2 -> 4 and 3 -> 4 branches below,
+        // because a v1 install never had a `schedules` table to add the
+        // column onto; it gets the full v4 shape in one `createTable`.
         await transaction(() async {
           await m.createTable(medicines);
           await m.createTable(schedules);
@@ -443,11 +463,25 @@ class AppDatabase extends _$AppDatabase {
         return;
       }
 
-      if (from == 2 && to == 3) {
-        // A v2 install (Story 1.4 through 1.6) gaining this story's one new
-        // table. `medicines` and `schedules` already exist and are untouched.
+      if (from == 2 && to == 4) {
+        // A v2 install (Story 1.4 through 1.6): `medicines` and `schedules`
+        // already exist, as that version's app actually wrote them -- without
+        // `remindersEnabled`, which did not exist yet. `doses` (Story 1.7a) is
+        // created fresh, exactly as the old 2 -> 3 step did; `remindersEnabled`
+        // is added onto the pre-existing `schedules` row shape, exactly as the
+        // 3 -> 4 step below does for a v3 install.
         await transaction(() async {
           await m.createTable(doses);
+          await m.addColumn(schedules, schedules.remindersEnabled);
+        });
+        return;
+      }
+
+      if (from == 3 && to == 4) {
+        // A v3 install (Story 1.7a through Story 3.2): every table already
+        // exists. This story's one schema change is the new column.
+        await transaction(() async {
+          await m.addColumn(schedules, schedules.remindersEnabled);
         });
         return;
       }

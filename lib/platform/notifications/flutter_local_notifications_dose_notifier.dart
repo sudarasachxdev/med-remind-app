@@ -18,17 +18,23 @@
 // criterion ("a raw DateTime is never passed to the plugin") could be
 // violated, not four.
 //
-// UNCONDITIONAL `exactAllowWhileIdle`. Story 3.1b deferred the
-// `canScheduleExactAlarms()` check and its `inexactAllowWhileIdle` fallback
-// to Story 3.3, the first story with a real `zonedSchedule` call site for it
-// to modify (AD-14, epics.md note dated 2026-09-16). Building that branch
-// here would mean Story 3.3 edits a branch this story wrote rather than
-// adding one, and would need `PermissionGateway` wired into a port AD-1
-// keeps import-light. Do not add it here.
+// AD-14, LANDED HERE (Story 3.3, deferred twice before now). `schedule()`
+// asks `PermissionGateway.canScheduleExactAlarms()` fresh on every call --
+// never cached -- and falls back to `AndroidScheduleMode.inexactAllowWhileIdle`
+// when it answers `false`. Fresh on every call because the user can flip the
+// OS setting between one Dose being scheduled and the next; a value cached at
+// construction could keep falling back long after the permission was
+// granted, or the reverse.
 //
-// NO `onDidReceiveNotificationResponse` CALLBACK YET. Story 3.3 adds it to
-// this same `initialize()` call, for the tap-to-open-action-sheet route. An
-// empty placeholder here would be dead code with nothing to call it.
+// THE NOTIFICATION-TAP ROUTE (Story 3.3) lives in this file too --
+// `notificationTaps`, wired through `initialize()`'s
+// `onDidReceiveNotificationResponse` and a one-time
+// `getNotificationAppLaunchDetails()` check for the cold-launch case. See
+// that member's own doc comment for the two paths it covers.
+//
+// `onDidReceiveBackgroundNotificationResponse` IS NEVER PASSED TO
+// `initialize()` -- AD-3's one-process rule, and this story's own acceptance
+// criterion ("the app registers no background notification handler").
 //
 // `payload: dose.id` IS NOT A PARAMETER. `schedule()` already receives
 // `dose`; deriving the payload here makes "the payload carries a doseId
@@ -36,12 +42,15 @@
 // this adapter rather than a convention every future caller has to
 // remember.
 
+import 'dart:async';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../domain/model/dose.dart';
 import '../../domain/policy/notification_id_policy.dart';
 import '../../domain/port/dose_notifier.dart';
+import '../../domain/port/permission_gateway.dart';
 
 /// The one Android notification channel every scheduled reminder posts to.
 ///
@@ -58,22 +67,45 @@ const String _doseRemindersChannelDescription =
 /// The [DoseNotifier] backed by `flutter_local_notifications` (AD-6, AD-7).
 final class FlutterLocalNotificationsDoseNotifier implements DoseNotifier {
   /// Creates the adapter over the plugin's already-registered platform
-  /// implementation.
-  ///
-  /// Takes nothing, matching `FlutterLocalNotificationsPermissionGateway`:
-  /// `FlutterLocalNotificationsPlugin()` is itself a singleton factory, so
-  /// there is exactly one meaningful instance to hold in a running app.
-  const FlutterLocalNotificationsDoseNotifier();
+  /// implementation, reading exact-alarm permission from `permissionGateway`
+  /// (AD-14) on every [schedule] call.
+  FlutterLocalNotificationsDoseNotifier({required this._permissionGateway});
+
+  final PermissionGateway _permissionGateway;
 
   /// Guards [_ensureInitialized] so `initialize()` is called at most once per
-  /// process, however many times [schedule]/[cancelPending] run.
+  /// instance, however many times [schedule]/[cancelPending]/
+  /// [notificationTaps] run.
   ///
-  /// `static`, not an instance field: this adapter is constructed `const`,
-  /// so every instance shares the same underlying plugin registration
-  /// anyway, and a `static` flag is what keeps a second `const
-  /// FlutterLocalNotificationsDoseNotifier()` (a fresh instance, same
-  /// identity under `const`) from re-initializing.
-  static bool _initialized = false;
+  /// An instance field, not `static`: exactly one instance of this adapter
+  /// is ever constructed in a running app (`lib/main.dart`, held by
+  /// `dose_notifier_provider.dart` for the process's life), so instance-level
+  /// state behaves identically to a process-wide flag there. Unlike before
+  /// this story, the constructor is no longer zero-argument, so a `const`
+  /// call site can no longer canonicalise every instance into one object the
+  /// way `const FlutterLocalNotificationsDoseNotifier()` used to -- a test
+  /// that constructs this adapter with a fake `PermissionGateway` gets a
+  /// genuinely separate instance, and that instance must run its own real
+  /// `initialize()` call (registering its own [_onNotificationResponse]
+  /// closure, over its own [_notificationTapController]) rather than finding
+  /// a `static` flag already tripped by an earlier test's instance.
+  bool _initialized = false;
+
+  /// Buffers a tapped notification's `doseId` until `notificationTapProvider`
+  /// -- this stream's one intended listener -- attaches.
+  ///
+  /// Single-subscription, not broadcast (see [notificationTaps]'s own doc
+  /// comment): exactly one listener ever attaches, and a single-subscription
+  /// controller buffers events added before that listener does, which is
+  /// what makes the cold-launch path below work with no special sequencing
+  /// in `main.dart`.
+  final StreamController<String> _notificationTapController =
+      StreamController<String>();
+
+  /// Guards the one-time [_plugin.getNotificationAppLaunchDetails] check in
+  /// [notificationTaps], the same way [_initialized] guards
+  /// `_plugin.initialize`.
+  bool _launchDetailsChecked = false;
 
   FlutterLocalNotificationsPlugin get _plugin =>
       FlutterLocalNotificationsPlugin();
@@ -91,8 +123,62 @@ final class FlutterLocalNotificationsDoseNotifier implements DoseNotifier {
           requestSoundPermission: false,
         ),
       ),
+      onDidReceiveNotificationResponse: _onNotificationResponse,
+      // No `onDidReceiveBackgroundNotificationResponse` -- see this file's
+      // own header comment.
     );
     _initialized = true;
+  }
+
+  /// Routes a tap to [_notificationTapController]; drops everything else.
+  ///
+  /// A dismissal fires this SAME plugin callback, carrying
+  /// `NotificationResponseType.notificationDismissed` instead of
+  /// `.selectedNotification` -- this filter is the one thing keeping "the
+  /// user dismisses the notification... nothing further happens" true. A
+  /// `null` payload (should never happen -- [schedule] always sets one) is
+  /// dropped rather than added, since the port promises a `doseId`, not a
+  /// nullable one.
+  void _onNotificationResponse(NotificationResponse response) {
+    if (response.notificationResponseType !=
+        NotificationResponseType.selectedNotification) {
+      return;
+    }
+    final String? payload = response.payload;
+    if (payload != null) {
+      _notificationTapController.add(payload);
+    }
+  }
+
+  @override
+  Stream<String> get notificationTaps {
+    if (!_launchDetailsChecked) {
+      _launchDetailsChecked = true;
+      // Fire-and-forget: a getter cannot be `async`, and nothing here needs
+      // to block the caller -- `notificationTapProvider`'s own `StreamProvider`
+      // watches the returned stream regardless of when this resolves.
+      unawaited(_checkColdLaunch());
+    }
+    return _notificationTapController.stream;
+  }
+
+  /// The cold-launch case: the app was fully closed and a notification tap
+  /// started the process. The live [_onNotificationResponse] callback never
+  /// sees this tap -- it is only wired up once `initialize()` has returned,
+  /// which is after the process (and the tap that started it) already
+  /// happened -- so this reads it back explicitly, once, from
+  /// `getNotificationAppLaunchDetails()`.
+  Future<void> _checkColdLaunch() async {
+    await _ensureInitialized();
+    final NotificationAppLaunchDetails? launchDetails = await _plugin
+        .getNotificationAppLaunchDetails();
+    if (launchDetails == null || !launchDetails.didNotificationLaunchApp) {
+      return;
+    }
+    final String? payload = launchDetails.notificationResponse?.payload;
+    if (payload != null) {
+      _notificationTapController.add(payload);
+    }
   }
 
   @override
@@ -110,13 +196,20 @@ final class FlutterLocalNotificationsDoseNotifier implements DoseNotifier {
       location,
     );
 
+    // AD-14: read fresh on every call, never cached -- the user can flip the
+    // OS setting between one Dose being scheduled and the next.
+    final bool exactAlarmsAllowed = await _permissionGateway
+        .canScheduleExactAlarms();
+
     await _plugin.zonedSchedule(
       id: notificationId(dose.id, tier),
       title: title,
       body: body,
       scheduledDate: fireTime,
       payload: dose.id,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: exactAlarmsAllowed
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle,
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _doseRemindersChannelId,

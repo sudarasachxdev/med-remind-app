@@ -1050,6 +1050,21 @@ class $SchedulesTable extends Schedules
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _remindersEnabledMeta = const VerificationMeta(
+    'remindersEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> remindersEnabled = GeneratedColumn<bool>(
+    'reminders_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("reminders_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1061,6 +1076,7 @@ class $SchedulesTable extends Schedules
     intervalDays,
     dosageAmount,
     reminderOverride,
+    remindersEnabled,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1152,6 +1168,15 @@ class $SchedulesTable extends Schedules
         ),
       );
     }
+    if (data.containsKey('reminders_enabled')) {
+      context.handle(
+        _remindersEnabledMeta,
+        remindersEnabled.isAcceptableOrUnknown(
+          data['reminders_enabled']!,
+          _remindersEnabledMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1197,6 +1222,10 @@ class $SchedulesTable extends Schedules
         DriftSqlType.string,
         data['${effectivePrefix}reminder_override'],
       ),
+      remindersEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}reminders_enabled'],
+      )!,
     );
   }
 
@@ -1265,6 +1294,15 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
   /// exists before the policy does and the schema needs no further migration
   /// to gain it.
   final String? reminderOverride;
+
+  /// Whether a primary reminder notification fires for this Schedule (FR-11).
+  ///
+  /// Defaults to `true`: a fresh install's very first save, and a
+  /// pre-Story-3.3 row read back after migration, both mean "reminders on"
+  /// -- the behaviour every Schedule had before this column existed. The
+  /// domain's own `Schedule.remindersEnabled` carries no default of its own
+  /// (see that field's doc comment); this is the one layer that needs one.
+  final bool remindersEnabled;
   const ScheduleRow({
     required this.id,
     required this.medicineId,
@@ -1275,6 +1313,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
     this.intervalDays,
     required this.dosageAmount,
     this.reminderOverride,
+    required this.remindersEnabled,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1294,6 +1333,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
     if (!nullToAbsent || reminderOverride != null) {
       map['reminder_override'] = Variable<String>(reminderOverride);
     }
+    map['reminders_enabled'] = Variable<bool>(remindersEnabled);
     return map;
   }
 
@@ -1314,6 +1354,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
       reminderOverride: reminderOverride == null && nullToAbsent
           ? const Value.absent()
           : Value(reminderOverride),
+      remindersEnabled: Value(remindersEnabled),
     );
   }
 
@@ -1332,6 +1373,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
       intervalDays: serializer.fromJson<int?>(json['intervalDays']),
       dosageAmount: serializer.fromJson<double>(json['dosageAmount']),
       reminderOverride: serializer.fromJson<String?>(json['reminderOverride']),
+      remindersEnabled: serializer.fromJson<bool>(json['remindersEnabled']),
     );
   }
   @override
@@ -1347,6 +1389,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
       'intervalDays': serializer.toJson<int?>(intervalDays),
       'dosageAmount': serializer.toJson<double>(dosageAmount),
       'reminderOverride': serializer.toJson<String?>(reminderOverride),
+      'remindersEnabled': serializer.toJson<bool>(remindersEnabled),
     };
   }
 
@@ -1360,6 +1403,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
     Value<int?> intervalDays = const Value.absent(),
     double? dosageAmount,
     Value<String?> reminderOverride = const Value.absent(),
+    bool? remindersEnabled,
   }) => ScheduleRow(
     id: id ?? this.id,
     medicineId: medicineId ?? this.medicineId,
@@ -1372,6 +1416,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
     reminderOverride: reminderOverride.present
         ? reminderOverride.value
         : this.reminderOverride,
+    remindersEnabled: remindersEnabled ?? this.remindersEnabled,
   );
   ScheduleRow copyWithCompanion(SchedulesCompanion data) {
     return ScheduleRow(
@@ -1396,6 +1441,9 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
       reminderOverride: data.reminderOverride.present
           ? data.reminderOverride.value
           : this.reminderOverride,
+      remindersEnabled: data.remindersEnabled.present
+          ? data.remindersEnabled.value
+          : this.remindersEnabled,
     );
   }
 
@@ -1410,7 +1458,8 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
           ..write('daysOfWeek: $daysOfWeek, ')
           ..write('intervalDays: $intervalDays, ')
           ..write('dosageAmount: $dosageAmount, ')
-          ..write('reminderOverride: $reminderOverride')
+          ..write('reminderOverride: $reminderOverride, ')
+          ..write('remindersEnabled: $remindersEnabled')
           ..write(')'))
         .toString();
   }
@@ -1426,6 +1475,7 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
     intervalDays,
     dosageAmount,
     reminderOverride,
+    remindersEnabled,
   );
   @override
   bool operator ==(Object other) =>
@@ -1439,7 +1489,8 @@ class ScheduleRow extends DataClass implements Insertable<ScheduleRow> {
           other.daysOfWeek == this.daysOfWeek &&
           other.intervalDays == this.intervalDays &&
           other.dosageAmount == this.dosageAmount &&
-          other.reminderOverride == this.reminderOverride);
+          other.reminderOverride == this.reminderOverride &&
+          other.remindersEnabled == this.remindersEnabled);
 }
 
 class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
@@ -1452,6 +1503,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
   final Value<int?> intervalDays;
   final Value<double> dosageAmount;
   final Value<String?> reminderOverride;
+  final Value<bool> remindersEnabled;
   final Value<int> rowid;
   const SchedulesCompanion({
     this.id = const Value.absent(),
@@ -1463,6 +1515,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
     this.intervalDays = const Value.absent(),
     this.dosageAmount = const Value.absent(),
     this.reminderOverride = const Value.absent(),
+    this.remindersEnabled = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SchedulesCompanion.insert({
@@ -1475,6 +1528,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
     this.intervalDays = const Value.absent(),
     required double dosageAmount,
     this.reminderOverride = const Value.absent(),
+    this.remindersEnabled = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        medicineId = Value(medicineId),
@@ -1492,6 +1546,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
     Expression<int>? intervalDays,
     Expression<double>? dosageAmount,
     Expression<String>? reminderOverride,
+    Expression<bool>? remindersEnabled,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1504,6 +1559,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
       if (intervalDays != null) 'interval_days': intervalDays,
       if (dosageAmount != null) 'dosage_amount': dosageAmount,
       if (reminderOverride != null) 'reminder_override': reminderOverride,
+      if (remindersEnabled != null) 'reminders_enabled': remindersEnabled,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1518,6 +1574,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
     Value<int?>? intervalDays,
     Value<double>? dosageAmount,
     Value<String?>? reminderOverride,
+    Value<bool>? remindersEnabled,
     Value<int>? rowid,
   }) {
     return SchedulesCompanion(
@@ -1530,6 +1587,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
       intervalDays: intervalDays ?? this.intervalDays,
       dosageAmount: dosageAmount ?? this.dosageAmount,
       reminderOverride: reminderOverride ?? this.reminderOverride,
+      remindersEnabled: remindersEnabled ?? this.remindersEnabled,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1564,6 +1622,9 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
     if (reminderOverride.present) {
       map['reminder_override'] = Variable<String>(reminderOverride.value);
     }
+    if (remindersEnabled.present) {
+      map['reminders_enabled'] = Variable<bool>(remindersEnabled.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1582,6 +1643,7 @@ class SchedulesCompanion extends UpdateCompanion<ScheduleRow> {
           ..write('intervalDays: $intervalDays, ')
           ..write('dosageAmount: $dosageAmount, ')
           ..write('reminderOverride: $reminderOverride, ')
+          ..write('remindersEnabled: $remindersEnabled, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3327,6 +3389,7 @@ typedef $$SchedulesTableCreateCompanionBuilder =
       Value<int?> intervalDays,
       required double dosageAmount,
       Value<String?> reminderOverride,
+      Value<bool> remindersEnabled,
       Value<int> rowid,
     });
 typedef $$SchedulesTableUpdateCompanionBuilder =
@@ -3340,6 +3403,7 @@ typedef $$SchedulesTableUpdateCompanionBuilder =
       Value<int?> intervalDays,
       Value<double> dosageAmount,
       Value<String?> reminderOverride,
+      Value<bool> remindersEnabled,
       Value<int> rowid,
     });
 
@@ -3430,6 +3494,11 @@ class $$SchedulesTableFilterComposer
 
   ColumnFilters<String> get reminderOverride => $composableBuilder(
     column: $table.reminderOverride,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get remindersEnabled => $composableBuilder(
+    column: $table.remindersEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3531,6 +3600,11 @@ class $$SchedulesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get remindersEnabled => $composableBuilder(
+    column: $table.remindersEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$MedicinesTableOrderingComposer get medicineId {
     final $$MedicinesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -3595,6 +3669,11 @@ class $$SchedulesTableAnnotationComposer
 
   GeneratedColumn<String> get reminderOverride => $composableBuilder(
     column: $table.reminderOverride,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get remindersEnabled => $composableBuilder(
+    column: $table.remindersEnabled,
     builder: (column) => column,
   );
 
@@ -3684,6 +3763,7 @@ class $$SchedulesTableTableManager
                 Value<int?> intervalDays = const Value.absent(),
                 Value<double> dosageAmount = const Value.absent(),
                 Value<String?> reminderOverride = const Value.absent(),
+                Value<bool> remindersEnabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SchedulesCompanion(
                 id: id,
@@ -3695,6 +3775,7 @@ class $$SchedulesTableTableManager
                 intervalDays: intervalDays,
                 dosageAmount: dosageAmount,
                 reminderOverride: reminderOverride,
+                remindersEnabled: remindersEnabled,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3708,6 +3789,7 @@ class $$SchedulesTableTableManager
                 Value<int?> intervalDays = const Value.absent(),
                 required double dosageAmount,
                 Value<String?> reminderOverride = const Value.absent(),
+                Value<bool> remindersEnabled = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SchedulesCompanion.insert(
                 id: id,
@@ -3719,6 +3801,7 @@ class $$SchedulesTableTableManager
                 intervalDays: intervalDays,
                 dosageAmount: dosageAmount,
                 reminderOverride: reminderOverride,
+                remindersEnabled: remindersEnabled,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

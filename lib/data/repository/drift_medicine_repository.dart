@@ -211,6 +211,7 @@ final class DriftMedicineRepository implements MedicineRepository {
     int? intervalDays,
     required double dosageAmount,
     String? reminderOverride,
+    required bool remindersEnabled,
   }) {
     final Schedule candidate = Schedule(
       id: _newId(),
@@ -222,6 +223,7 @@ final class DriftMedicineRepository implements MedicineRepository {
       intervalDays: intervalDays,
       dosageAmount: dosageAmount,
       reminderOverride: reminderOverride,
+      remindersEnabled: remindersEnabled,
     );
 
     // ONE transaction around the check and the insert. The clash test reads the
@@ -408,6 +410,7 @@ final class DriftMedicineRepository implements MedicineRepository {
         intervalDays: row.intervalDays,
         dosageAmount: row.dosageAmount,
         reminderOverride: row.reminderOverride,
+        remindersEnabled: row.remindersEnabled,
       );
 
       // The frequency/companion pairing is checked on the way OUT as well as
@@ -441,6 +444,7 @@ final class DriftMedicineRepository implements MedicineRepository {
     intervalDays: Value<int?>(schedule.intervalDays),
     dosageAmount: Value<double>(schedule.dosageAmount),
     reminderOverride: Value<String?>(schedule.reminderOverride),
+    remindersEnabled: Value<bool>(schedule.remindersEnabled),
   );
 
   /// Runs [read] and turns anything it throws into a typed failure.

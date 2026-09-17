@@ -112,6 +112,7 @@ final class HomePlan {
     required this.overdueCount,
     required this.doses,
     required this.notificationsDenied,
+    required this.exactAlarmsDenied,
   });
 
   /// The instant this plan was resolved against. The greeting and the date
@@ -165,6 +166,19 @@ final class HomePlan {
   /// exists so a stale "granted" can never sit in front of a user whose
   /// reminders have actually stopped firing (this spec's own Boundaries).
   final bool notificationsDenied;
+
+  /// Whether `PermissionGateway.canScheduleExactAlarms()` read false as of
+  /// this plan's own build (AD-14, Story 3.3).
+  ///
+  /// Read fresh every `build()`, exactly like [notificationsDenied] and for
+  /// the same reason -- the OS setting can change outside the app at any
+  /// moment. A milder fact than [notificationsDenied]: this means a primary
+  /// reminder may fire somewhat late (batched into the next Doze/idle wake
+  /// window), never that it fails to fire at all. `home_screen.dart`'s own
+  /// conditional shows at most one of the two banners, with
+  /// [notificationsDenied] taking priority when both are true (this spec's
+  /// own Design Notes: the milder fact is subsumed by the stronger one).
+  final bool exactAlarmsDenied;
 }
 
 /// Holds Home's [HomePlan].
@@ -182,6 +196,7 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
 
     await _provisionalDoseGeneration(now);
     final bool notificationsDenied = !await _notificationsCurrentlyEnabled();
+    final bool exactAlarmsDenied = !await _exactAlarmsCurrentlyAllowed();
 
     final DoseRepository doseRepository = ref.read(doseRepositoryProvider);
     final MedicineRepository medicineRepository = ref.read(
@@ -283,6 +298,7 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
       overdueCount: overdue,
       doses: entries,
       notificationsDenied: notificationsDenied,
+      exactAlarmsDenied: exactAlarmsDenied,
     );
   }
 
@@ -300,4 +316,11 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
   /// report a permission state the OS no longer holds.
   Future<bool> _notificationsCurrentlyEnabled() =>
       ref.read(permissionGatewayProvider).areNotificationsEnabled();
+
+  /// AD-14, Story 3.3: the same shape as [_notificationsCurrentlyEnabled],
+  /// for [PermissionGateway.canScheduleExactAlarms] -- read fresh on every
+  /// `build()` so [HomePlan.exactAlarmsDenied] can never report a permission
+  /// state the OS no longer holds.
+  Future<bool> _exactAlarmsCurrentlyAllowed() =>
+      ref.read(permissionGatewayProvider).canScheduleExactAlarms();
 }

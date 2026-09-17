@@ -7,12 +7,20 @@
 // every row of `dose_recorder_test.dart`'s matrix that mentions notification
 // scheduling or cancellation.
 
+import 'dart:async';
+
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/policy/notification_id_policy.dart';
 import 'package:med_remind_app/domain/port/dose_notifier.dart';
 
 /// A [DoseNotifier] that records every [schedule] and [cancelPending] call,
 /// and can be told to fail.
+///
+/// [notificationTaps] is broadcast, unlike the real adapter's
+/// single-subscription stream (see `flutter_local_notifications_dose_notifier
+/// .dart`'s own reasoning) -- a test double's job is letting more than one
+/// widget pump/listener observe an emitted tap across a test's lifetime,
+/// which a single-subscription stream would refuse past the first `.listen`.
 final class FakeDoseNotifier implements DoseNotifier {
   FakeDoseNotifier({this.failure});
 
@@ -47,4 +55,15 @@ final class FakeDoseNotifier implements DoseNotifier {
     final Object? toThrow = failure;
     if (toThrow != null) throw toThrow;
   }
+
+  final StreamController<String> _tapController =
+      StreamController<String>.broadcast();
+
+  @override
+  Stream<String> get notificationTaps => _tapController.stream;
+
+  /// Simulates a notification tap arriving for [doseId], live or as a
+  /// buffered cold-launch event -- a test's stand-in for a real tap reaching
+  /// `notificationTapProvider`.
+  void emitTap(String doseId) => _tapController.add(doseId);
 }

@@ -184,6 +184,7 @@ void main() {
 
   group('effectiveEscalationWindow (spec-1-7b, AD-16\'s resolution order)', () {
     Schedule schedule({String? reminderOverride}) => Schedule(
+      remindersEnabled: true,
       id: 'schedule-1',
       medicineId: 'medicine-1',
       timeOfDay: '08:00',

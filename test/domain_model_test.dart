@@ -505,7 +505,7 @@ void main() {
       expect(original.copyWith(), equals(original));
     });
 
-    test('Schedule keeps all eight other fields', () {
+    test('Schedule keeps all nine other fields', () {
       final Schedule original = _fullSchedule();
       final Schedule edited = original.copyWith(timeOfDay: '09:15');
 
@@ -528,6 +528,7 @@ void main() {
       expect(edited.intervalDays, isNull);
       expect(edited.dosageAmount, 0.5);
       expect(edited.reminderOverride, 'PT45M');
+      expect(edited.remindersEnabled, isFalse);
     });
 
     test('Schedule replaces each field on its own, and only that one', () {
@@ -546,12 +547,17 @@ void main() {
         original.copyWith(reminderOverride: 'PT10M').reminderOverride,
         'PT10M',
       );
+      expect(
+        original.copyWith(remindersEnabled: true).remindersEnabled,
+        isTrue,
+      );
 
       for (final Schedule edited in <Schedule>[
         original.copyWith(ianaTimezone: 'Asia/Colombo'),
         original.copyWith(daysOfWeek: <int>{DateTime.friday}),
         original.copyWith(dosageAmount: 2),
         original.copyWith(reminderOverride: 'PT10M'),
+        original.copyWith(remindersEnabled: true),
       ]) {
         expect(edited.id, original.id);
         expect(edited.medicineId, original.medicineId);
@@ -659,6 +665,7 @@ void main() {
         base.copyWith(daysOfWeek: <int>{DateTime.monday}),
         base.copyWith(dosageAmount: 9),
         base.copyWith(reminderOverride: 'PT1M'),
+        base.copyWith(remindersEnabled: true),
       ]) {
         expect(other, isNot(equals(base)));
       }
@@ -812,6 +819,7 @@ Schedule _schedule({
   int? intervalDays,
   double dosageAmount = 1,
   String? reminderOverride,
+  bool remindersEnabled = true,
 }) => Schedule(
   id: id,
   medicineId: medicineId,
@@ -822,6 +830,7 @@ Schedule _schedule({
   intervalDays: intervalDays,
   dosageAmount: dosageAmount,
   reminderOverride: reminderOverride,
+  remindersEnabled: remindersEnabled,
 );
 
 Medicine _medicine({
@@ -870,6 +879,12 @@ Medicine _fullMedicine() => Medicine(
 );
 
 /// A Schedule with every optional field populated. See [_fullMedicine].
+///
+/// [remindersEnabled] is `false` -- distinct from [Schedule]'s only sensible
+/// production value at this layer (every real caller passes `true` or the
+/// user's own toggle) -- for the same "distinctness" reason [_fullMedicine]
+/// gives: a `copyWith`/equality test using the default could not tell a field
+/// that was carried through from one that happened to match by coincidence.
 Schedule _fullSchedule() => Schedule(
   id: 'schedule-id',
   medicineId: 'medicine-id',
@@ -879,4 +894,5 @@ Schedule _fullSchedule() => Schedule(
   daysOfWeek: <int>{DateTime.monday, DateTime.thursday},
   dosageAmount: 0.5,
   reminderOverride: 'PT45M',
+  remindersEnabled: false,
 );
