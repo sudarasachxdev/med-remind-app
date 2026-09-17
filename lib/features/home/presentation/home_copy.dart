@@ -259,6 +259,20 @@ abstract final class HomeCopy {
       'Reminders may arrive a few minutes late. MediTracker still works as '
       'a manual tracker.';
 
+  // --- Budget banner (AD-8, Story 3.4) ----------------------------------------------------
+
+  /// The banner's title -- states the fact plainly (`EXPERIENCE.md`'s Voice
+  /// and Tone: no judgment, no alarm), and names no raw number: "44" is an
+  /// implementation detail, not something a user benefits from being told.
+  static const String budgetBannerTitle =
+      'Reminders are scheduled for your nearest doses only.';
+
+  /// The banner's second line -- what happens next, stated as a fact rather
+  /// than an apology or a promise with a date attached.
+  static const String budgetBannerBody =
+      'The rest will be scheduled as those doses are taken, skipped or '
+      'pass their time.';
+
   // --- Footer -----------------------------------------------------------------------------
 
   /// `EXPERIENCE.md`'s Voice and Tone table, verbatim -- see the file comment
@@ -361,6 +375,8 @@ abstract final class HomeCopy {
     permissionBannerDismiss,
     exactAlarmBannerTitle,
     exactAlarmBannerBody,
+    budgetBannerTitle,
+    budgetBannerBody,
     privacyFootnote,
     emptyStateTitle,
     emptyStateBody,

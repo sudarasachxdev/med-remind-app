@@ -45,6 +45,7 @@ import 'package:med_remind_app/domain/service/dose_generator.dart';
 import 'package:med_remind_app/features/add_medicine/domain/add_medicine_draft.dart';
 import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_copy.dart';
 import 'package:med_remind_app/features/add_medicine/presentation/add_medicine_screen.dart';
+import 'package:med_remind_app/features/home/presentation/budget_banner.dart';
 import 'package:med_remind_app/features/home/presentation/dose_card.dart';
 import 'package:med_remind_app/features/home/presentation/home_copy.dart';
 import 'package:med_remind_app/features/home/presentation/home_empty_state.dart';
@@ -695,6 +696,119 @@ void main() {
       );
 
       expect(find.byType(PermissionBanner), findsNothing);
+    });
+  });
+
+  group('the budget banner (AD-8, Story 3.4, this spec\'s own matrix row)', () {
+    /// Four Medicines, each on its own everyDay Schedule at a time later
+    /// than `defaultNow` -- 14 future occurrences per Schedule inside the
+    /// 14-day horizon (`[today, today + 14 days)`), so 4 Schedules land
+    /// comfortably over `budgetedDoseCount` (44) with no synthetic Dose
+    /// construction needed; the exact boundary arithmetic is
+    /// `notification_budget_policy_test.dart`'s job, not this widget test's.
+    Future<void> seedOverBudget(MedicineRepository medicines) async {
+      for (int i = 0; i < 4; i++) {
+        final Medicine medicine = await addMedicine(medicines, name: 'Med$i');
+        await addSchedule(medicines, medicine.id, timeOfDay: '23:00');
+      }
+    }
+
+    testWidgets(
+      'more upcoming doses than the budget reaches -- the banner shows, '
+      'directly after the permission-banner slot and before the overdue '
+      'banner',
+      (tester) async {
+        await pumpHome(
+          tester,
+          now: DateTime(2026, 9, 9, 14, 0),
+          permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+          seed: (medicines) async {
+            await seedOverBudget(medicines);
+            // Also puts a Dose Overdue by 14:00, so all three conditional
+            // banners are on screen together.
+            final Medicine overdue = await addMedicine(
+              medicines,
+              name: 'OverdueMed',
+            );
+            await addSchedule(medicines, overdue.id, timeOfDay: '07:00');
+          },
+        );
+
+        expect(find.byType(BudgetBanner), findsOneWidget);
+        expect(find.text(HomeCopy.budgetBannerTitle), findsOneWidget);
+
+        final double permissionY = tester
+            .getTopLeft(find.byType(PermissionBanner))
+            .dy;
+        final double budgetY = tester.getTopLeft(find.byType(BudgetBanner)).dy;
+        final double overdueY = tester
+            .getTopLeft(find.byType(OverdueBanner))
+            .dy;
+
+        expect(
+          permissionY,
+          lessThan(budgetY),
+          reason: 'directly after the permission-banner slot',
+        );
+        expect(
+          budgetY,
+          lessThan(overdueY),
+          reason:
+              'UX-DR23: capability-level degradations cluster ahead of '
+              'the item-level overdue banner',
+        );
+      },
+    );
+
+    testWidgets(
+      'coexists with the permission banner -- neither is mutually exclusive '
+      'with the other',
+      (tester) async {
+        await pumpHome(
+          tester,
+          permissionGateway: FakePermissionGateway(notificationsEnabled: false),
+          seed: seedOverBudget,
+        );
+
+        expect(find.byType(PermissionBanner), findsOneWidget);
+        expect(find.byType(BudgetBanner), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'fewer upcoming doses than the budget reaches -- absent entirely, not '
+      'merely hidden',
+      (tester) async {
+        await pumpHome(
+          tester,
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
+          },
+        );
+
+        expect(find.byType(BudgetBanner), findsNothing);
+      },
+    );
+
+    testWidgets('dismissing hides the banner for this session', (tester) async {
+      await pumpHome(tester, seed: seedOverBudget);
+      expect(find.byType(BudgetBanner), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BudgetBanner),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Not `find.byType(BudgetBanner)`, matching `PermissionBanner`'s own
+      // dismiss test: that widget is the `State` holder for the dismiss flag
+      // itself, so it stays mounted (rendering nothing) -- the banner's own
+      // visible content is what "hides" means here.
+      expect(find.text(HomeCopy.budgetBannerTitle), findsNothing);
+      expect(find.byIcon(Icons.hourglass_top), findsNothing);
     });
   });
 

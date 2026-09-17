@@ -771,4 +771,128 @@ void main() {
       expect(plan.exactAlarmsDenied, isTrue);
     });
   });
+
+  group('budgetExceeded (AD-8, Story 3.4)', () {
+    /// Saves a Dose directly through `DoseRepository.saveDose` -- not through
+    /// `DoseGenerator` -- so this group can seed an exact candidate count
+    /// rather than reverse-engineering one from a Schedule's own occurrence
+    /// policy across the 14-day horizon.
+    Future<void> saveSyntheticDose(
+      DoseRepository doses, {
+      required String scheduleId,
+      required String medicineId,
+      required DateTime scheduledLocal,
+      DateTime? takenAt,
+      DateTime? snoozedUntil,
+    }) => doses.saveDose(
+      Dose(
+        scheduleId: scheduleId,
+        medicineId: medicineId,
+        scheduledLocal: scheduledLocal,
+        ianaTimezone: FixedClock.defaultZone,
+        takenAt: takenAt,
+        snoozedUntil: snoozedUntil,
+        escalationWindowMinutes: 60,
+        medicineName: 'Metformin',
+        dosageAmount: 1,
+        dosageUnit: 'tablet',
+        form: 'tablet',
+      ),
+    );
+
+    /// A Medicine and Schedule real enough to satisfy the `doses` table's own
+    /// foreign key, then immediately deactivated so the provisional
+    /// generation `HomePlanController.build()` runs on every read skips it
+    /// entirely (`DoseGenerator.generate`'s own "inactive Medicine" rule) --
+    /// leaving only the exact synthetic Doses this group saves directly,
+    /// with no generated occurrence of its own mixed in.
+    Future<({String scheduleId, String medicineId})> inertSchedule(
+      MedicineRepository medicines,
+    ) async {
+      final Medicine medicine = await addMedicine(medicines);
+      final Schedule schedule = await addSchedule(
+        medicines,
+        medicine.id,
+        timeOfDay: '23:00',
+      );
+      await medicines.saveMedicine(medicine.copyWith(active: false));
+      return (scheduleId: schedule.id, medicineId: medicine.id);
+    }
+
+    test('fewer candidates than the budget -- false', () async {
+      final c = buildContainer();
+      final ids = await inertSchedule(c.medicines);
+      for (int i = 0; i < 10; i++) {
+        await saveSyntheticDose(
+          c.doses,
+          scheduleId: ids.scheduleId,
+          medicineId: ids.medicineId,
+          scheduledLocal: defaultNow.add(Duration(hours: i + 1)),
+        );
+      }
+
+      final HomePlan plan = await c.container.read(
+        homePlanControllerProvider.future,
+      );
+
+      expect(plan.budgetExceeded, isFalse);
+    });
+
+    test('more candidates than the budget -- true', () async {
+      final c = buildContainer();
+      final ids = await inertSchedule(c.medicines);
+      for (int i = 0; i < 50; i++) {
+        await saveSyntheticDose(
+          c.doses,
+          scheduleId: ids.scheduleId,
+          medicineId: ids.medicineId,
+          scheduledLocal: defaultNow.add(Duration(hours: i + 1)),
+        );
+      }
+
+      final HomePlan plan = await c.container.read(
+        homePlanControllerProvider.future,
+      );
+
+      expect(plan.budgetExceeded, isTrue);
+    });
+
+    test('a live-snoozed or already-resolved Dose does not count toward the '
+        'total -- 46 raw candidates, 2 excluded, lands at exactly 44 (not '
+        '> 44)', () async {
+      final c = buildContainer();
+      final ids = await inertSchedule(c.medicines);
+      for (int i = 0; i < 46; i++) {
+        await saveSyntheticDose(
+          c.doses,
+          scheduleId: ids.scheduleId,
+          medicineId: ids.medicineId,
+          scheduledLocal: defaultNow.add(Duration(hours: i + 1)),
+        );
+      }
+      // Overwrites two of the 46 rows just saved (same natural key), one
+      // already-resolved (Taken) and one live-Snoozed -- both excluded by
+      // `needsChainConsidered`.
+      await saveSyntheticDose(
+        c.doses,
+        scheduleId: ids.scheduleId,
+        medicineId: ids.medicineId,
+        scheduledLocal: defaultNow.add(const Duration(hours: 1)),
+        takenAt: defaultNow,
+      );
+      await saveSyntheticDose(
+        c.doses,
+        scheduleId: ids.scheduleId,
+        medicineId: ids.medicineId,
+        scheduledLocal: defaultNow.add(const Duration(hours: 2)),
+        snoozedUntil: defaultNow.add(const Duration(hours: 3)),
+      );
+
+      final HomePlan plan = await c.container.read(
+        homePlanControllerProvider.future,
+      );
+
+      expect(plan.budgetExceeded, isFalse);
+    });
+  });
 }

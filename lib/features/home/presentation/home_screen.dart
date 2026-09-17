@@ -1,7 +1,7 @@
 // Home's real content -- UX-DR23's fixed vertical order: greeting, date, week
 // strip, progress card, notification-permission banner (conditional, Story
-// 3.1b), overdue banner (conditional), time-grouped dose list, privacy
-// footnote.
+// 3.1b), budget banner (conditional, AD-8, Story 3.4), overdue banner
+// (conditional), time-grouped dose list, privacy footnote.
 //
 // Story 1.3's placeholder ends here. `HomePlanController` is this screen's
 // only data source (AD-13: the widget reads a provider, it touches no
@@ -51,6 +51,7 @@ import '../../../shared/design/design.dart';
 import '../../../shared/widgets/dose_action_sheet.dart';
 import '../../add_medicine/presentation/add_medicine_copy.dart';
 import '../application/home_plan_controller.dart';
+import 'budget_banner.dart';
 import 'dose_card.dart';
 import 'home_copy.dart';
 import 'home_empty_state.dart';
@@ -275,11 +276,15 @@ class _HomePlanBody extends StatelessWidget {
   }
 }
 
-/// The progress card, the two conditional banners, and the time-grouped dose
-/// list -- Story 1.8's populated plan, extracted so `_HomePlanBody` can branch
-/// above it (Story 1.9) without touching what either branch renders. Story
-/// 3.1b adds the notification-permission banner between the progress card and
-/// the overdue banner; neither of Story 1.8's own two renderings changes.
+/// The progress card, the three conditional banners, and the time-grouped
+/// dose list -- Story 1.8's populated plan, extracted so `_HomePlanBody` can
+/// branch above it (Story 1.9) without touching what either branch renders.
+/// Story 3.1b adds the notification-permission banner between the progress
+/// card and the overdue banner; Story 3.4 adds the budget banner directly
+/// after it, independent of both permission reasons (a user can have
+/// notifications denied AND more doses than the budget covers at once, and
+/// both facts are worth surfacing); neither of Story 1.8's own two
+/// renderings changes.
 class _PopulatedPlan extends StatelessWidget {
   const _PopulatedPlan({required this.plan});
 
@@ -316,14 +321,27 @@ class _PopulatedPlan extends StatelessWidget {
             reason: PermissionBannerReason.exactAlarmsDenied,
           ),
         ],
-        // 6. Overdue banner -- present only when there is one to show
+        // 6. Budget banner (AD-8, Story 3.4) -- present only while more
+        // Doses need their notification chain considered than the budget
+        // reaches. Not mutually exclusive with either permission reason
+        // above: a user can have notifications denied AND more doses than
+        // the budget covers at once, and both facts are independently worth
+        // surfacing (this spec's own Design Notes). Sits directly after the
+        // permission-banner slot and before the overdue banner (UX-DR23):
+        // capability-level degradations cluster together, ahead of the
+        // item-level overdue banner.
+        if (plan.budgetExceeded) ...<Widget>[
+          const SizedBox(height: MTSpacing.s4),
+          const BudgetBanner(),
+        ],
+        // 7. Overdue banner -- present only when there is one to show
         // (this spec's own "banner absent entirely" row: not empty, not
         // hidden, simply not built).
         if (plan.overdueCount > 0) ...<Widget>[
           const SizedBox(height: MTSpacing.s4),
           OverdueBanner(overdueCount: plan.overdueCount),
         ],
-        // 7. The time-grouped dose list. `plan.now` -- the one instant this
+        // 8. The time-grouped dose list. `plan.now` -- the one instant this
         // whole plan was resolved against -- rather than a second clock read,
         // so a Snoozed card's own "reminder in {n} min" cannot disagree with
         // what `resolve()` itself used (Story 2.3).

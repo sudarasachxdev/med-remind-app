@@ -40,6 +40,7 @@ import '../../../domain/model/dose_state.dart';
 import '../../../domain/model/medicine.dart';
 import '../../../domain/policy/dose_resolution_policy.dart';
 import '../../../domain/policy/dose_resolver.dart';
+import '../../../domain/policy/notification_budget_policy.dart';
 import '../../../domain/port/dose_repository.dart';
 import '../../../domain/port/medicine_repository.dart';
 import '../../../domain/port/permission_gateway.dart';
@@ -113,6 +114,7 @@ final class HomePlan {
     required this.doses,
     required this.notificationsDenied,
     required this.exactAlarmsDenied,
+    required this.budgetExceeded,
   });
 
   /// The instant this plan was resolved against. The greeting and the date
@@ -179,6 +181,17 @@ final class HomePlan {
   /// [notificationsDenied] taking priority when both are true (this spec's
   /// own Design Notes: the milder fact is subsumed by the stronger one).
   final bool exactAlarmsDenied;
+
+  /// Whether more Doses need their notification chain considered, within
+  /// [visible]'s own horizon, than [budgetedDoseCount] reaches (AD-8, Story
+  /// 3.4).
+  ///
+  /// A plain count comparison against the named constant -- AD-8's own "one
+  /// source for the number" -- not a re-run of `planBudget` merely to read a
+  /// boolean back out of it: this field only needs to know THAT more Doses
+  /// exist than the budget covers, never which ones, so it never touches
+  /// `notification_budget_policy.dart`'s ranking functions at all.
+  final bool budgetExceeded;
 }
 
 /// Holds Home's [HomePlan].
@@ -223,6 +236,12 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
       today,
       horizonEnd,
     );
+    // Story 3.4, AD-8: no second repository query and no `await` -- unlike
+    // `notificationsDenied`/`exactAlarmsDenied` above, this is a plain count
+    // comparison computed from `visible`, already in hand.
+    final bool budgetExceeded =
+        visible.where((Dose dose) => needsChainConsidered(dose, now)).length >
+        budgetedDoseCount;
     // Read once and reused for both `hasMedicines` (Story 1.9) and the glyph
     // lookup below -- this spec's own Design Notes: "one field, not a new
     // query".
@@ -299,6 +318,7 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
       doses: entries,
       notificationsDenied: notificationsDenied,
       exactAlarmsDenied: exactAlarmsDenied,
+      budgetExceeded: budgetExceeded,
     );
   }
 
