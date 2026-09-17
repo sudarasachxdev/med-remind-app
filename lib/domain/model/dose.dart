@@ -154,8 +154,16 @@ final class Dose {
   /// retroactively rewrite whether a past Dose was logged late.
   final int escalationWindowMinutes;
 
-  /// The follow-up offsets, in minutes after [scheduledAt], that made up this
-  /// Dose's escalation chain at generation (AD-16). Unmodifiable.
+  /// The escalation chain's three numbers, frozen at generation (AD-16) --
+  /// only two of which are follow-up notification offsets. Unmodifiable.
+  ///
+  /// Index `[0]` and index `[1]`, in minutes after [scheduledAt], are the
+  /// `followUp`/`finalFollowUp` notification offsets that
+  /// `FlutterLocalNotificationsDoseNotifier.schedule` reads (AD-7). Index
+  /// `[2]` is not a notification offset -- see
+  /// `dose_resolution_policy.dart`'s doc comment on
+  /// `defaultFollowUpOffsetsMinutes` for why the list still carries a third
+  /// entry despite `NotificationTier` having no matching fifth member.
   final List<int> followUpOffsetsMinutes;
 
   /// The Medicine's name, frozen at generation (AD-11).

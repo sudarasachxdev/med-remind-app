@@ -21,20 +21,81 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/onboarding_completed_at_startup_provider.dart';
 import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
+import 'package:med_remind_app/domain/model/dose.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 import 'support/fake_onboarding_state_store.dart';
 import 'support/fixed_clock.dart';
+import 'support/unused_dose_notifier.dart';
 import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
 import 'support/unused_permission_gateway.dart';
 import 'support/recording_interceptor.dart';
 
 void main() {
+  group('the timezone data fix (lib/main.dart, Story 3.2)', () {
+    // `lib/main.dart` never called `tzdata.initializeTimeZones()` before this
+    // story -- every other test file that constructs a `Dose` calls it in its
+    // own `setUpAll` (`dose_recorder_test.dart`, `dose_generator_test.dart`),
+    // which is exactly why nothing caught it: every Dose generated in the
+    // running app (via Home's `provisionalDoseGeneration`, live since Epic 1)
+    // has been throwing `LocationNotFoundException` at generation time.
+    //
+    // This file deliberately has NO `setUpAll(tzdata.initializeTimeZones)` of
+    // its own -- unlike `dose_recorder_test.dart`/`dose_generator_test.dart`
+    // -- so this one test can first demonstrate the gap `main()` had (a Dose
+    // construction throws) and then demonstrate the fix (the exact call
+    // `main()` now makes, before `runApp`, makes the same construction
+    // succeed). A test that only asserted "the function was called" could not
+    // tell a real fix from a call to the wrong function; this asserts the
+    // actual failure mode instead.
+    test('a Dose with a non-UTC IANA zone cannot be constructed until '
+        'tzdata.initializeTimeZones() has run, and can be once it has', () {
+      Dose buildDose() => Dose(
+        scheduleId: 'schedule-1',
+        medicineId: 'medicine-1',
+        scheduledLocal: DateTime(2026, 1, 1, 8),
+        ianaTimezone: 'Asia/Colombo',
+        escalationWindowMinutes: 60,
+        medicineName: 'Candesartan',
+        dosageAmount: 1,
+        dosageUnit: 'tablet',
+        form: 'tablet',
+      );
+
+      expect(
+        buildDose,
+        throwsA(isA<tz.LocationNotFoundException>()),
+        reason:
+            'This is the bug this story fixes: every Dose construction '
+            'resolves its zone through tz.getLocation, which throws until '
+            'the timezone database is loaded -- exactly what '
+            "lib/main.dart's own missing call left true for every Dose "
+            'generated in the running app.',
+      );
+
+      // The fix: the one call `lib/main.dart` now makes before `runApp`,
+      // independent of the onboarding/clock pre-frame reads.
+      tzdata.initializeTimeZones();
+
+      expect(
+        buildDose,
+        returnsNormally,
+        reason:
+            'Once the timezone database is loaded -- as lib/main.dart now '
+            'guarantees before runApp -- constructing a Dose in a '
+            'non-UTC zone no longer throws.',
+      );
+    });
+  });
+
   group('readOnboardingCompletedAtStartup', () {
     test('reports a stored completion', () async {
       final store = FakeOnboardingStateStore(completed: true);
@@ -177,6 +238,7 @@ void main() {
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
+          doseNotifier: const UnusedDoseNotifier(),
         ),
       );
       addTearDown(container.dispose);
@@ -201,6 +263,7 @@ void main() {
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
+          doseNotifier: const UnusedDoseNotifier(),
         ),
       );
       addTearDown(completed.dispose);
@@ -219,6 +282,7 @@ void main() {
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
+          doseNotifier: const UnusedDoseNotifier(),
         ),
       );
       addTearDown(fresh.dispose);
@@ -231,13 +295,14 @@ void main() {
       );
     });
 
-    test('binds all six providers and nothing else', () {
+    test('binds all seven providers and nothing else', () {
       // A count, and a deliberate pause. It said `hasLength(2)` and "binds
       // both providers" until Story 1.5 added the repository and the clock,
-      // `hasLength(4)` until Story 1.8 added the dose repository, and
-      // `hasLength(5)` until Story 3.1b added the permission gateway -- each
-      // bump is the assertion that made the addition a decision rather than a
-      // silent widening of the composition root. Bump it when you mean to.
+      // `hasLength(4)` until Story 1.8 added the dose repository,
+      // `hasLength(5)` until Story 3.1b added the permission gateway, and
+      // `hasLength(6)` until Story 3.2 added the dose notifier -- each bump is
+      // the assertion that made the addition a decision rather than a silent
+      // widening of the composition root. Bump it when you mean to.
       expect(
         startupOverrides(
           store: FakeOnboardingStateStore(),
@@ -246,8 +311,9 @@ void main() {
           clock: FixedClock(),
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
+          doseNotifier: const UnusedDoseNotifier(),
         ),
-        hasLength(6),
+        hasLength(7),
       );
     });
   });
@@ -265,10 +331,11 @@ void main() {
     // it saved (PRD §9's worst bug), a quiet clock default has to invent a
     // timezone, which AD-6 makes permanent and Dose resolution reads as truth,
     // a quiet dose-repository default would have Home read an empty plan
-    // forever with nothing on screen saying why, and a quiet permission-gateway
+    // forever with nothing on screen saying why, a quiet permission-gateway
     // default (Story 3.1b) would report notifications as granted with nothing
-    // real behind that answer -- AD-14's silent-success failure, from the
-    // other direction.
+    // real behind that answer, and a quiet dose-notifier default (Story 3.2)
+    // would schedule and cancel nothing while a real adapter exists to bind
+    // instead -- AD-14's silent-success failure, from all three directions.
     for (final ({String name, ProviderBase<Object?> provider}) target
         in <({String name, ProviderBase<Object?> provider})>[
           (
@@ -281,6 +348,7 @@ void main() {
             name: 'permissionGatewayProvider',
             provider: permissionGatewayProvider,
           ),
+          (name: 'doseNotifierProvider', provider: doseNotifierProvider),
         ]) {
       test('${target.name} throws until the composition root binds it', () {
         final container = ProviderContainer();

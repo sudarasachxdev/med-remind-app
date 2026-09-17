@@ -20,12 +20,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/db/app_database.dart';
 import '../domain/port/clock.dart';
+import '../domain/port/dose_notifier.dart';
 import '../domain/port/dose_repository.dart';
 import '../domain/port/medicine_repository.dart';
 import '../domain/port/onboarding_state_store.dart';
 import '../domain/port/permission_gateway.dart';
 import '../platform/clock/system_clock.dart';
 import 'clock_provider.dart';
+import 'dose_notifier_provider.dart';
 import 'dose_repository_provider.dart';
 import 'medicine_repository_provider.dart';
 import 'onboarding_completed_at_startup_provider.dart';
@@ -172,6 +174,15 @@ Future<Clock> resolveClockAtStartup({
 /// reads it fresh on every build (`home_plan_controller.dart`'s own file
 /// comment), so a launch with no override would throw the moment Home's
 /// provider first runs, not merely leave a feature unreachable.
+///
+/// [doseNotifier] is Story 3.2's addition, the seventh binding.
+/// `doseNotifierProvider` flips to the same no-safe-default (throws) pattern
+/// [permissionGateway] and [doseRepository] already use, the moment a real
+/// adapter (`FlutterLocalNotificationsDoseNotifier`) exists to bind instead
+/// of `NoOpDoseNotifier` -- see `dose_notifier_provider.dart`'s own comment.
+/// A launch with no override would throw the moment any Dose is recorded
+/// (`DoseRecorder.take`/`skip`/`snooze`), not merely leave scheduling
+/// unreachable.
 List<Override> startupOverrides({
   required OnboardingStateStore store,
   required bool completed,
@@ -179,6 +190,7 @@ List<Override> startupOverrides({
   required Clock clock,
   required DoseRepository doseRepository,
   required PermissionGateway permissionGateway,
+  required DoseNotifier doseNotifier,
 }) {
   return <Override>[
     onboardingStateStoreProvider.overrideWithValue(store),
@@ -187,6 +199,7 @@ List<Override> startupOverrides({
     clockProvider.overrideWithValue(clock),
     doseRepositoryProvider.overrideWithValue(doseRepository),
     permissionGatewayProvider.overrideWithValue(permissionGateway),
+    doseNotifierProvider.overrideWithValue(doseNotifier),
   ];
 }
 

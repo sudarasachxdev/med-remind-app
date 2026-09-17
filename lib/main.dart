@@ -22,6 +22,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 
 import 'app/router_provider.dart';
 import 'app/startup.dart';
@@ -31,16 +32,28 @@ import 'data/repository/drift_dose_repository.dart';
 import 'data/repository/drift_medicine_repository.dart';
 import 'data/repository/drift_onboarding_state_store.dart';
 import 'domain/port/clock.dart';
+import 'domain/port/dose_notifier.dart';
 import 'domain/port/dose_repository.dart';
 import 'domain/port/medicine_repository.dart';
 import 'domain/port/onboarding_state_store.dart';
 import 'domain/port/permission_gateway.dart';
+import 'platform/notifications/flutter_local_notifications_dose_notifier.dart';
 import 'platform/permissions/flutter_local_notifications_permission_gateway.dart';
 
 Future<void> main() async {
   // Needed before any plugin channel is used, and `driftDatabase` reaches
   // path_provider to find the application documents directory.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // AD-3's one-process rule puts this in the composition root, and nowhere
+  // else. Every `Dose` construction resolves its zone through
+  // `tz.getLocation` (`Dose._asInstant`), which throws
+  // `LocationNotFoundException` until this has run -- and a Dose can be
+  // constructed as early as the first `HomePlanController.build()`, well
+  // before `resolveClockAtStartup()` below returns. Independent of that read
+  // (this is synchronous and touches no port), so the two are not sequenced
+  // against one another -- only both must land before `runApp`.
+  tzdata.initializeTimeZones();
 
   // One database per process (AD-3). Constructed here and nowhere else.
   final AppDatabase database = AppDatabase();
@@ -55,6 +68,9 @@ Future<void> main() async {
   // alongside `clock`.
   const PermissionGateway permissionGateway =
       FlutterLocalNotificationsPermissionGateway();
+  // AD-6/AD-7's real notification adapter (Story 3.2). Owns nothing and
+  // opens nothing, exactly like `permissionGateway` above.
+  const DoseNotifier doseNotifier = FlutterLocalNotificationsDoseNotifier();
 
   // Closes the database when the OS tears the app down. The return value is
   // discarded on purpose: the listener registers itself with the
@@ -80,6 +96,7 @@ Future<void> main() async {
         clock: clock,
         doseRepository: doseRepository,
         permissionGateway: permissionGateway,
+        doseNotifier: doseNotifier,
       ),
     ),
   );

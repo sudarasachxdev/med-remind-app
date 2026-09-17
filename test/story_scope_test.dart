@@ -76,15 +76,30 @@ const Map<String, String> _forbiddenImports = <String, String>{
 /// only thing keeping the read in the one file the architecture test exempts
 /// from the AD-5 rule. If a second directory genuinely needs one of these, that
 /// is an architecture decision, not a test edit.
-const Map<String, String> _directoryScopedImports = <String, String>{
-  'flutter_timezone': 'lib/platform/clock',
-  // `flutter_local_notifications` joined here at Story 3.1a, the same day it
-  // left [_forbiddenImports] -- see that map's own comment. AD-17 makes the
-  // adapter this narrows to the sole authority for permission state; a second
-  // importer is an architecture decision (a real second call site), not a
-  // test edit.
-  'flutter_local_notifications': 'lib/platform/permissions',
-};
+///
+/// Each package maps to a LIST of directories, not one -- mirroring
+/// [_providerHomes]'s own per-directory-list shape. `flutter_local_notifications`
+/// is the first package to need more than one: Story 3.1a's permission
+/// adapter lives in `lib/platform/permissions`, and Story 3.2's scheduling
+/// adapter (`FlutterLocalNotificationsDoseNotifier`) lives in the sibling
+/// `lib/platform/notifications` -- two real call sites onto the same plugin,
+/// each its own architecture decision already made, not a widening this test
+/// merely failed to catch.
+const Map<String, List<String>> _directoryScopedImports =
+    <String, List<String>>{
+      'flutter_timezone': <String>['lib/platform/clock'],
+      // `flutter_local_notifications` joined here at Story 3.1a, the same day
+      // it left [_forbiddenImports] -- see that map's own comment. AD-17 makes
+      // the permission adapter this narrows to the sole authority for
+      // permission state. Story 3.2 added the second entry: AD-6/AD-7's
+      // scheduling adapter is the second, and only the second, real call
+      // site -- a third importer is still an architecture decision, not a
+      // test edit.
+      'flutter_local_notifications': <String>[
+        'lib/platform/permissions',
+        'lib/platform/notifications',
+      ],
+    };
 
 /// Identifiers that would mean a permission is being requested, whatever the
 /// import looks like.
@@ -228,16 +243,21 @@ void main() {
     }
   });
 
-  test('a directory-scoped package is imported only in its one directory', () {
+  test('a directory-scoped package is imported only in its listed '
+      'directories', () {
     // The guard AD-9's amendment needs. Reading the device zone is now legal,
-    // in one adapter -- so this asserts the narrowness, not the ban.
-    for (final MapEntry<String, String> entry
+    // in one adapter -- so this asserts the narrowness, not the ban. Matches
+    // against ANY of a package's listed directories now, not exactly one --
+    // `flutter_local_notifications` names two as of Story 3.2.
+    for (final MapEntry<String, List<String>> entry
         in _directoryScopedImports.entries) {
       final List<String> offenders = sources
           .where(
             (({String path, String source}) f) =>
                 f.source.contains('package:${entry.key}/') &&
-                !f.path.startsWith('${entry.value}/'),
+                !entry.value.any(
+                  (String directory) => f.path.startsWith('$directory/'),
+                ),
           )
           .map((({String path, String source}) f) => f.path)
           .toList();
@@ -246,9 +266,10 @@ void main() {
         isEmpty,
         reason:
             '${offenders.join(', ')} imports ${entry.key}, which only '
-            '${entry.value}/ may. AD-5 confines every clock read to one '
-            'adapter and AD-9 permits the zone to be read there; a second '
-            'reader is an architecture decision, not a test edit.',
+            '${entry.value.join(' or ')} may. AD-5 confines every clock read '
+            'to one adapter and AD-9 permits the zone to be read there; a '
+            'reader outside every listed directory is an architecture '
+            'decision, not a test edit.',
       );
     }
   });
@@ -354,10 +375,10 @@ void main() {
 
   test('the platform adapters this story does not own are still empty', () {
     for (final String layer in <String>[
-      // Epic 3 -- flutter_local_notifications, the scheduling adapter Stories
-      // 3.2/3.3 build. `lib/platform/permissions` left this list at Story
-      // 3.1a, which is the story that owns it.
-      'lib/platform/notifications',
+      // `lib/platform/permissions` left this list at Story 3.1a, which is the
+      // story that owns it; `lib/platform/notifications` left it at Story
+      // 3.2, which built `FlutterLocalNotificationsDoseNotifier` there.
+      //
       // Epic 3 -- flutter_timezone, read only by the Reconciler (AD-6, AD-9).
       // Listed because it is the third plugin adapter and the one an
       // "innocent" helper is most likely to reach into: a screen that wants

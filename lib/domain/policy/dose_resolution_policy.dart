@@ -20,8 +20,20 @@
 /// instead of each carrying its own copy of this window.
 const int doseResolveWindowDays = 14;
 
-/// The default follow-up offsets, in minutes after a Dose's primary
-/// reminder, that make up its escalation chain (AD-8, AD-16): +15, +30, +60.
+/// Three numbers from the PRD's escalation chain (§4.3, §4.9), only two of
+/// which are follow-up notification offsets.
+///
+/// Index `[0]` (+15) and index `[1]` (+30) are `followUp`/`finalFollowUp`'s
+/// offsets, in minutes after a Dose's primary reminder (AD-7, AD-8, AD-16) --
+/// `FlutterLocalNotificationsDoseNotifier.schedule` reads exactly these two
+/// indices, never the whole list. Index `[2]` (+60) is **not** a notification
+/// offset: it is the numeric coincidence that AD-20's `clamp(interval/4, 1h,
+/// 6h)` formula happens to produce for a twice/thrice-daily default schedule
+/// -- the PRD's own "Overdue at +60" state transition, already captured
+/// independently on a Dose as `escalationWindowMinutes`, computed at
+/// generation. AD-7's `NotificationTier` enum has exactly four members, with
+/// no fifth slot for a "second final" or "+60 reminder" this third entry
+/// might otherwise suggest.
 ///
 /// Frozen onto a Dose at generation as `followUpOffsetsMinutes`, per AD-16 --
 /// never re-read from `ReminderSettings` afterwards, so that widening this

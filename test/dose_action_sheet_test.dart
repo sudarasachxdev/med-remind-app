@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
@@ -24,6 +25,7 @@ import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/model/schedule.dart';
 import 'package:med_remind_app/domain/policy/snooze_policy.dart';
+import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
 import 'package:med_remind_app/features/home/presentation/home_copy.dart';
@@ -99,6 +101,12 @@ void main() {
       ProviderScope(
         overrides: <Override>[
           doseRepositoryProvider.overrideWithValue(doses),
+          // Story 3.2 flips doseNotifierProvider's default to a throw --
+          // this file's matrix is about DoseRecorder's write side and the
+          // sheet's own copy, not about scheduling or cancelling a real
+          // notification, so the inert no-op is what this test relied on
+          // implicitly before that story existed.
+          doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
           clockProvider.overrideWithValue(FixedClock(instant: now)),
         ],
         child: MaterialApp(

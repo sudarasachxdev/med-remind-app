@@ -39,6 +39,7 @@ import 'package:med_remind_app/shared/design/design.dart';
 import 'support/fake_onboarding_state_store.dart';
 import 'support/fake_permission_gateway.dart';
 import 'support/fixed_clock.dart';
+import 'support/unused_dose_notifier.dart';
 import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
 import 'support/unused_permission_gateway.dart';
@@ -439,6 +440,7 @@ void main() {
             clock: FixedClock(),
             doseRepository: const UnusedDoseRepository(),
             permissionGateway: const UnusedPermissionGateway(),
+            doseNotifier: const UnusedDoseNotifier(),
           ),
         ),
       );
@@ -475,6 +477,7 @@ void main() {
             clock: FixedClock(),
             doseRepository: const UnusedDoseRepository(),
             permissionGateway: const UnusedPermissionGateway(),
+            doseNotifier: const UnusedDoseNotifier(),
           ),
         ),
       );

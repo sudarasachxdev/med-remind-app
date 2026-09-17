@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
@@ -36,6 +37,7 @@ import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/policy/snooze_policy.dart';
+import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
 import 'package:med_remind_app/domain/port/permission_gateway.dart';
@@ -123,6 +125,13 @@ void main() {
         overrides: <Override>[
           medicineRepositoryProvider.overrideWithValue(medicines),
           doseRepositoryProvider.overrideWithValue(doses),
+          // Story 3.2 flips doseNotifierProvider's default to a throw --
+          // this screen's dose-action taps (take/skip/snooze) go through
+          // DoseRecorder, which reads this provider as its third port. None
+          // of this file's own matrix is about scheduling or cancelling a
+          // real notification, so the inert no-op is what every other test
+          // written before this story implicitly relied on.
+          doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
           clockProvider.overrideWithValue(
             FixedClock(instant: now ?? defaultNow),
           ),
@@ -190,6 +199,13 @@ void main() {
         overrides: <Override>[
           medicineRepositoryProvider.overrideWithValue(medicines),
           doseRepositoryProvider.overrideWithValue(doses),
+          // Story 3.2 flips doseNotifierProvider's default to a throw --
+          // this screen's dose-action taps (take/skip/snooze) go through
+          // DoseRecorder, which reads this provider as its third port. None
+          // of this file's own matrix is about scheduling or cancelling a
+          // real notification, so the inert no-op is what every other test
+          // written before this story implicitly relied on.
+          doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
           clockProvider.overrideWithValue(
             FixedClock(instant: now ?? defaultNow),
           ),
