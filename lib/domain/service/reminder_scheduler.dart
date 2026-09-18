@@ -65,4 +65,81 @@ final class ReminderScheduler {
   static String _amountLabel(double amount) => amount == amount.roundToDouble()
       ? amount.toInt().toString()
       : amount.toString();
+
+  /// Schedules [dose]'s first follow-up reminder, unless [remindersEnabled]
+  /// is `false` or [dose]'s own frozen `followUpOffsetsMinutes[0]` is at or
+  /// past its own frozen `escalationWindowMinutes`.
+  ///
+  /// The second guard is unreachable through today's UI -- the Escalation
+  /// Window's own formula never resolves narrower than a 60-minute floor,
+  /// safely past the default offset of 15 -- but is built anyway: it is what
+  /// makes "Follow-Up Reminders stop when the Escalation Window closes"
+  /// (FR-11) a structural guarantee of this method rather than an accident of
+  /// today's one reachable default, since `Schedule.reminderOverride` already
+  /// exists as a field a future story could wire a narrower window through.
+  ///
+  /// The body is EXPERIENCE.md's own UJ-3 walkthrough copy for this exact
+  /// moment, verbatim.
+  Future<void> scheduleFollowUp(
+    Dose dose, {
+    required bool remindersEnabled,
+  }) async {
+    if (!remindersEnabled) return;
+    if (dose.followUpOffsetsMinutes[0] >= dose.escalationWindowMinutes) {
+      return;
+    }
+
+    await _notifier.schedule(
+      dose: dose,
+      tier: NotificationTier.followUp,
+      title: dose.medicineName,
+      body: 'Your ${_timeLabel(dose.scheduledLocal)} dose is still waiting.',
+    );
+  }
+
+  /// Schedules [dose]'s final follow-up reminder, unless [remindersEnabled]
+  /// is `false` or [dose]'s own frozen `followUpOffsetsMinutes[1]` is at or
+  /// past its own frozen `escalationWindowMinutes`. See [scheduleFollowUp]
+  /// for why this guard exists even though nothing reachable today trips it.
+  ///
+  /// The body is authored for this story -- EXPERIENCE.md names no exact
+  /// copy for this moment, only that it exists ("final reminder... still no
+  /// response"). FR-11's own words are the binding constraint: differ from
+  /// the primary, communicate the Dose is still unresolved, escalate in
+  /// specificity without escalating in tone. No fixed number of minutes is
+  /// named, since the cadence is nominally per-schedule configurable (AD-16)
+  /// even though nothing reachable overrides it yet.
+  Future<void> scheduleFinalFollowUp(
+    Dose dose, {
+    required bool remindersEnabled,
+  }) async {
+    if (!remindersEnabled) return;
+    if (dose.followUpOffsetsMinutes[1] >= dose.escalationWindowMinutes) {
+      return;
+    }
+
+    await _notifier.schedule(
+      dose: dose,
+      tier: NotificationTier.finalFollowUp,
+      title: dose.medicineName,
+      body:
+          'Your ${_timeLabel(dose.scheduledLocal)} dose is still unresolved. '
+          'Reminders will stop soon.',
+    );
+  }
+
+  /// `8:00 AM` / `8:15 PM` -- duplicates `HomeCopy.timeLabel`'s exact
+  /// algorithm (`lib/features/home/presentation/home_copy.dart:100-105`),
+  /// including its own leading-zero behaviour on the hour (it prints
+  /// `08:00 AM`, not `8:00 AM`, despite that method's own doc comment's
+  /// example) -- matching the code, not the comment, so a notification's
+  /// wording reads consistently with what Home already shows for the same
+  /// Dose. Duplicated rather than imported for the same AD-1 reason
+  /// [_amountLabel] duplicates `HomeCopy.doseAmountLabel`.
+  static String _timeLabel(DateTime time) {
+    final int hour12 = time.hour % 12 == 0 ? 12 : time.hour % 12;
+    final String minute = time.minute.toString().padLeft(2, '0');
+    final String meridiem = time.hour >= 12 ? 'PM' : 'AM';
+    return '${hour12.toString().padLeft(2, '0')}:$minute $meridiem';
+  }
 }

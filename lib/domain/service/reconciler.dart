@@ -40,6 +40,7 @@ import '../model/medicine.dart';
 import '../model/schedule.dart';
 import '../policy/dose_resolution_policy.dart';
 import '../policy/notification_budget_policy.dart';
+import '../policy/notification_id_policy.dart';
 import '../port/clock.dart';
 import '../port/dose_notifier.dart';
 import '../port/dose_repository.dart';
@@ -55,8 +56,9 @@ import 'reminder_scheduler.dart';
 /// regenerateAfterScheduleChange] in reaction to a Schedule's own
 /// `ianaTimezone` changing (AD-9: "reacting to a zone change is the
 /// Reconciler's alone"), and the only class permitted to call
-/// [ReminderScheduler.schedulePrimary] or [DoseNotifier.cancelPending] at all
-/// -- "nothing else in the codebase re-registers notifications".
+/// [ReminderScheduler.schedulePrimary], [ReminderScheduler.scheduleFollowUp],
+/// [ReminderScheduler.scheduleFinalFollowUp] or [DoseNotifier.cancelPending]
+/// at all -- "nothing else in the codebase re-registers notifications".
 final class Reconciler {
   /// Creates a reconciler over every port/service AD-9's pipeline needs. All
   /// seven are ports or already-built domain services (AD-1): this class
@@ -96,8 +98,8 @@ final class Reconciler {
   ///   4. **Generate missing Doses** to the horizon, unconditionally.
   ///      Idempotent (AD-10) alongside step 2's own regeneration.
   ///   5. **Re-register notifications within budget** -- cancels every
-  ///      candidate's pending notifications, then schedules a primary for
-  ///      every candidate [planBudget] assigns a non-empty tier list.
+  ///      candidate's pending notifications, then schedules every tier
+  ///      [planBudget] assigns it (primary, follow-up, final follow-up).
   ///
   /// Step 6, "surface any permission or scheduling degradation", needs no
   /// code here: `HomePlan.notificationsDenied`/`exactAlarmsDenied`/
@@ -140,8 +142,9 @@ final class Reconciler {
   }
 
   /// AD-9 step 5, AD-8: cancels every candidate's pending notifications, then
-  /// schedules a primary reminder for every candidate [planBudget] did not
-  /// leave beyond budget.
+  /// dispatches each tier [planBudget] assigned it to the matching
+  /// `ReminderScheduler` method -- a candidate beyond budget gets an empty
+  /// tier list and so nothing scheduled.
   Future<void> _reregisterWithinBudget(DateTime now) async {
     final DateTime today = Medicine.dateOnly(now);
     final DateTime horizonEnd = today.add(
@@ -174,11 +177,36 @@ final class Reconciler {
 
     for (final ScheduledTiers entry in planBudget(candidates)) {
       await _notifier.cancelPending(entry.dose.id);
-      if (entry.tiers.isNotEmpty) {
-        await _reminderScheduler.schedulePrimary(
-          entry.dose,
-          remindersEnabled: true,
-        );
+      for (final NotificationTier tier in entry.tiers) {
+        switch (tier) {
+          case NotificationTier.primary:
+            await _reminderScheduler.schedulePrimary(
+              entry.dose,
+              remindersEnabled: true,
+            );
+          case NotificationTier.followUp:
+            await _reminderScheduler.scheduleFollowUp(
+              entry.dose,
+              remindersEnabled: true,
+            );
+          case NotificationTier.finalFollowUp:
+            await _reminderScheduler.scheduleFinalFollowUp(
+              entry.dose,
+              remindersEnabled: true,
+            );
+          case NotificationTier.snooze:
+            // `planBudget` never assigns this tier
+            // (`notification_budget_policy.dart`'s own header comment:
+            // snooze is scheduled on demand only when a Dose is actually
+            // snoozed, out of this policy's scope). Asserting here, rather
+            // than silently skipping, means a future change to
+            // `tiersForRank` that starts returning it is caught here, not
+            // shipped as a silently miscategorized reminder.
+            assert(
+              false,
+              'planBudget must never assign NotificationTier.snooze',
+            );
+        }
       }
     }
   }

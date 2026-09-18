@@ -31,6 +31,7 @@ import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/model/schedule.dart';
 import 'package:med_remind_app/domain/policy/dose_resolution_policy.dart';
 import 'package:med_remind_app/domain/policy/notification_budget_policy.dart';
+import 'package:med_remind_app/domain/policy/notification_id_policy.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
 import 'package:med_remind_app/domain/port/reconciliation_state_store.dart';
@@ -298,9 +299,8 @@ void main() {
   });
 
   group('re-registration within budget', () {
-    test('cancels every candidate and schedules a primary only for those '
-        'planBudget gives a non-empty tier list, in ascending scheduledAt '
-        'order', () async {
+    test('cancels every candidate and schedules a primary for every one '
+        'within budget, in ascending scheduledAt order', () async {
       final Medicine medicine = await addMedicine();
       // Both times are still ahead of `now` (10:30), so both today's
       // occurrences are real candidates -- `needsChainConsidered` excludes
@@ -317,23 +317,88 @@ void main() {
       final List<Dose> candidates =
           visible.where((Dose dose) => needsChainConsidered(dose, now)).toList()
             ..sort((Dose a, Dose b) => a.scheduledAt.compareTo(b.scheduledAt));
-      // Both schedules generate a Dose for every one of the 14 horizon days,
-      // well within `fullChainDoseCount`, so every one of them is scheduled.
+      // Both schedules generate a Dose for every one of the 14 horizon days
+      // -- 28 candidates, comfortably within `budgetedDoseCount` (44), so
+      // every one of them gets at least a primary reminder. (The nearest 10
+      // of them also get a follow-up and final follow-up -- covered by this
+      // group's own full-chain test below, not re-proven here.)
       expect(candidates.length, greaterThan(1));
 
       expect(notifier.cancelled, hasLength(candidates.length));
-      expect(notifier.scheduled, hasLength(candidates.length));
 
-      final List<String> scheduledOrder = notifier.scheduled
+      final List<String> primaryScheduledOrder = notifier.scheduled
+          .where((r) => r.$2 == NotificationTier.primary)
           .map((r) => r.$1)
           .toList();
       expect(
-        scheduledOrder,
+        primaryScheduledOrder,
         candidates.map((Dose d) => d.id).toList(),
         reason:
-            'schedulePrimary must be called in ascending scheduledAt order, '
-            'matching the rank planBudget assigned',
+            'schedulePrimary must be called for every within-budget '
+            'candidate, in ascending scheduledAt order, matching the rank '
+            'planBudget assigned',
       );
+    });
+
+    test('a full-chain-ranked candidate (nearest fullChainDoseCount) gets all '
+        'three tiers scheduled, not primary alone (AD-8)', () async {
+      final Medicine medicine = await addMedicine();
+      for (final String time in <String>['11:00', '12:00', '13:00', '14:00']) {
+        await addSchedule(medicine.id, timeOfDay: time);
+      }
+
+      await buildReconciler().run();
+
+      final List<Dose> visible = await doses.dosesScheduledBetween(
+        today,
+        horizonEnd,
+      );
+      final List<Dose> candidates =
+          visible.where((Dose dose) => needsChainConsidered(dose, now)).toList()
+            ..sort((Dose a, Dose b) => a.scheduledAt.compareTo(b.scheduledAt));
+      expect(candidates.length, greaterThan(fullChainDoseCount));
+
+      final Dose nearest = candidates.first;
+      final List<NotificationTier> tiersScheduled = notifier.scheduled
+          .where((r) => r.$1 == nearest.id)
+          .map((r) => r.$2)
+          .toList();
+      expect(tiersScheduled, <NotificationTier>[
+        NotificationTier.primary,
+        NotificationTier.followUp,
+        NotificationTier.finalFollowUp,
+      ]);
+    });
+
+    test('a primary-only-ranked candidate still gets only primary; follow-up '
+        'and final follow-up are never called for it', () async {
+      final Medicine medicine = await addMedicine();
+      for (final String time in <String>['11:00', '12:00', '13:00', '14:00']) {
+        await addSchedule(medicine.id, timeOfDay: time);
+      }
+
+      await buildReconciler().run();
+
+      final List<Dose> visible = await doses.dosesScheduledBetween(
+        today,
+        horizonEnd,
+      );
+      final List<Dose> candidates =
+          visible.where((Dose dose) => needsChainConsidered(dose, now)).toList()
+            ..sort((Dose a, Dose b) => a.scheduledAt.compareTo(b.scheduledAt));
+      // A rank safely inside the primary-only band (fullChainDoseCount
+      // through budgetedDoseCount, exclusive) and safely inside the
+      // candidate list generated above.
+      final int midRank = fullChainDoseCount + 2;
+      expect(candidates.length, greaterThan(midRank));
+      expect(midRank, lessThan(budgetedDoseCount));
+
+      final Dose midCandidate = candidates[midRank];
+      final List<NotificationTier> tiersScheduled = notifier.scheduled
+          .where((r) => r.$1 == midCandidate.id)
+          .map((r) => r.$2)
+          .toList();
+      expect(tiersScheduled, <NotificationTier>[NotificationTier.primary]);
     });
 
     test(
