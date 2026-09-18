@@ -288,6 +288,36 @@ void main() {
     expect(resolve(dose, now).state, DoseState.missed);
   });
 
+  test('day attribution is stable across a late-night action: an 11:30 PM dose '
+      'taken at 12:10 AM the next day still belongs to the 11:30 PM day', () {
+    // Wednesday 23:30 Asia/Colombo -> 18:00 UTC the same day (+05:30, no
+    // DST) -- the same Wednesday this file's own top-level fixture uses.
+    final DateTime eveningScheduledLocal = DateTime(2026, 9, 9, 23, 30);
+    final DateTime eveningScheduledAt = DateTime.utc(2026, 9, 9, 18, 0);
+    // 00:10 the following calendar day, Asia/Colombo -> 18:40 UTC: 40
+    // minutes after scheduledAt, well before the 04:00 boundary would roll
+    // the logical day over, and not a logical-day crossing at all.
+    final DateTime takenAt = eveningScheduledAt.add(
+      const Duration(minutes: 40),
+    );
+    final dose = _dose(scheduledLocal: eveningScheduledLocal, takenAt: takenAt);
+    final now = takenAt.add(const Duration(hours: 1));
+
+    // Taken wins unconditionally over every time-based branch, per
+    // resolve()'s own branch order -- regardless of the calendar-midnight
+    // crossing between scheduledAt and takenAt.
+    expect(resolve(dose, now).state, DoseState.taken);
+
+    // Day attribution is a fact about scheduledAt alone: the 23:30 instant
+    // names 2026-09-09 as its own calendar day (well after the 04:00
+    // boundary), unaffected by when -- or whether -- the dose was later
+    // acted on.
+    expect(
+      logicalDay(dose.scheduledAt, dose.ianaTimezone),
+      const LogicalDay(2026, 9, 9),
+    );
+  });
+
   test('14-day edge, inside: a Missed dose 13 days old is isResolvable', () {
     final dose = _dose(scheduledLocal: scheduledLocal);
     final now = dose.scheduledAt.add(const Duration(days: 13));

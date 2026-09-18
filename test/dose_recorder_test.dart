@@ -176,6 +176,10 @@ void main() {
           DoseResolution(DoseState.taken, loggedLate: true),
         );
         expect(notifier.cancelled, equals([dose.id]));
+        // AC4: scheduledTime is unchanged by a late resolution -- only
+        // takenAt moved. True structurally (AD-4 restricts who may write
+        // scheduledLocal at all), asserted directly here for this row.
+        expect(saved.scheduledLocal, dose.scheduledLocal);
       },
     );
 
@@ -256,6 +260,20 @@ void main() {
       );
       await doses.saveDose(dose);
       expect(resolve(dose, now).state, DoseState.overdue);
+
+      await recorder.skip(dose);
+
+      final Dose saved = (await doses.findDose(dose.id))!;
+      expect(resolve(saved, now), DoseResolution(DoseState.skipped));
+      expect(notifier.cancelled, equals([dose.id]));
+    });
+
+    test('a Missed Dose 10 days old, within the 14-day edge: skippedAt = now, '
+        'resolves Skipped -- Missed is a label, never a lock', () async {
+      final DateTime scheduledLocal = now.subtract(const Duration(days: 10));
+      final Dose dose = buildDose(scheduledLocal: scheduledLocal);
+      await doses.saveDose(dose);
+      expect(resolve(dose, now).state, DoseState.missed);
 
       await recorder.skip(dose);
 
