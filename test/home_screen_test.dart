@@ -56,6 +56,7 @@ import 'package:med_remind_app/features/home/presentation/overdue_banner.dart';
 import 'package:med_remind_app/features/home/presentation/permission_banner.dart';
 import 'package:med_remind_app/features/home/presentation/progress_card.dart';
 import 'package:med_remind_app/features/home/presentation/week_strip.dart';
+import 'package:med_remind_app/shared/design/design.dart';
 import 'package:med_remind_app/shared/widgets/mt_toast.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
@@ -1053,10 +1054,12 @@ void main() {
           reason: 'the overdue row never opens the sheet',
         );
         await tester.pumpAndSettle();
-        expect(
-          find.textContaining('Recorded Metformin as taken'),
-          findsOneWidget,
-        );
+        // Exact match, not `textContaining`: a substring match would still
+        // pass if the ", logged late" suffix were silently dropped from
+        // this specific call site -- `dose_action_sheet_test.dart:207-222`
+        // already proves the sheet's own path produces this exact string;
+        // this proves the Overdue card's own call site does too (AC4).
+        expect(find.text(HomeCopy.toastTakenLate('Metformin')), findsOneWidget);
 
         final Dose taken = (await result.doses.dosesScheduledBetween(
           DateTime(2026, 9, 9),
@@ -1129,6 +1132,72 @@ void main() {
 
         // See the "I took it" test above for why this flush is here.
         await tester.pump(mtToastDuration);
+      },
+    );
+
+    testWidgets(
+      'the overdue card is amber, never red (UX-DR21): the accent bar and '
+      'status chip carry the state-late tokens, and neither of the '
+      'product\'s two danger/red tokens appears anywhere on the card',
+      (tester) async {
+        await pumpHome(
+          tester,
+          now: DateTime(2026, 9, 9, 14, 0),
+          seed: (medicines) async {
+            final Medicine medicine = await addMedicine(medicines);
+            await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+          },
+        );
+
+        // The accent bar: `_OverdueDoseCard`'s own left `BorderSide`
+        // (`dose_card.dart:301-302`), found by its colour rather than by
+        // type -- the card class itself is private to that library.
+        final Finder accentBar = find.byWidgetPredicate((Widget widget) {
+          if (widget is! DecoratedBox) return false;
+          final Decoration decoration = widget.decoration;
+          if (decoration is! BoxDecoration) return false;
+          final BoxBorder? border = decoration.border;
+          return border is Border &&
+              border.left.color == MTColors.stateLateMark;
+        });
+        expect(
+          accentBar,
+          findsOneWidget,
+          reason: 'the accent bar must use stateLateMark, not a red token',
+        );
+
+        // The status chip's fill: `_StatusChip`'s `background` param
+        // (`dose_card.dart:351-352`), also private -- found by colour.
+        final Finder statusChipFill = find.byWidgetPredicate((Widget widget) {
+          if (widget is! DecoratedBox) return false;
+          final Decoration decoration = widget.decoration;
+          if (decoration is! BoxDecoration) return false;
+          return decoration.color == MTColors.stateLateTile;
+        });
+        expect(
+          statusChipFill,
+          findsOneWidget,
+          reason: 'the status chip must use stateLateTile, not a red token',
+        );
+
+        // Contrast, the other half of UX-DR21: the product's only red
+        // tokens (`colors.dart`'s own "Danger" section) belong to exactly
+        // one control -- *Delete medicine* -- and must not appear anywhere
+        // in this Overdue card's own tree.
+        final Finder anyDangerSurface = find.byWidgetPredicate((Widget widget) {
+          if (widget is! DecoratedBox) return false;
+          final Decoration decoration = widget.decoration;
+          if (decoration is! BoxDecoration) return false;
+          return decoration.color == MTColors.stateDangerSurface ||
+              decoration.color == MTColors.stateDangerSurfacePressed;
+        });
+        expect(anyDangerSurface, findsNothing);
+
+        final Finder anyDangerInk = find.byWidgetPredicate((Widget widget) {
+          if (widget is! Text) return false;
+          return widget.style?.color == MTColors.stateDangerInk;
+        });
+        expect(anyDangerInk, findsNothing);
       },
     );
   });
@@ -1317,6 +1386,55 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.textContaining(HomeCopy.nothingScheduled), findsOneWidget);
     });
+
+    testWidgets(
+      'the overdue row\'s three real actions still clear the 44/48pt floor '
+      'at the largest accessibility text size (UX-DR20 -- the tightest '
+      'layout in the app, combined with the largest scale no other test '
+      'reaches)',
+      (tester) async {
+        await _withSemantics(tester, () async {
+          await pumpHome(
+            tester,
+            now: DateTime(2026, 9, 9, 14, 0),
+            textScale: 3,
+            seed: (medicines) async {
+              final Medicine medicine = await addMedicine(medicines);
+              await addSchedule(medicines, medicine.id, timeOfDay: '07:00');
+            },
+          );
+
+          for (final String label in <String>[
+            '✓ I took it',
+            'Snooze',
+            'Skip',
+          ]) {
+            // Identical technique to the default-scale floor test above:
+            // the floor is enforced on the pill's own `ConstrainedBox`, not
+            // on the bare `Text` inside it.
+            final Size size = tester.getSize(
+              find
+                  .ancestor(
+                    of: find.text(label),
+                    matching: find.byWidgetPredicate(
+                      (Widget w) =>
+                          w is ConstrainedBox && w.constraints.minHeight >= 44,
+                    ),
+                  )
+                  .first,
+            );
+            expect(
+              size.height,
+              greaterThanOrEqualTo(kMinInteractiveDimension),
+              reason:
+                  '"$label"\'s pill is ${size.height}pt tall at textScale '
+                  '3; UX-DR20 names this row the tightest case',
+            );
+            expect(find.bySemanticsLabel(label), findsOneWidget);
+          }
+        });
+      },
+    );
   });
 
   group('the route in: a tapped notification opens its Dose\'s action sheet '
