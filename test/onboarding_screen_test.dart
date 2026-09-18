@@ -17,16 +17,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/onboarding_completed_at_startup_provider.dart';
 import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
+import 'package:med_remind_app/app/reconciliation_state_store_provider.dart';
 import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
+import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/features/home/presentation/home_screen.dart';
 import 'package:med_remind_app/features/onboarding/presentation/escalation_timeline.dart';
 import 'package:med_remind_app/features/onboarding/presentation/onboarding_copy.dart';
@@ -42,6 +46,7 @@ import 'support/fixed_clock.dart';
 import 'support/unused_dose_notifier.dart';
 import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
+import 'support/unused_reconciliation_state_store.dart';
 import 'support/unused_permission_gateway.dart';
 
 /// The design's reference device frame: 402 x 874 logical pixels (iOS).
@@ -441,6 +446,7 @@ void main() {
             doseRepository: const UnusedDoseRepository(),
             permissionGateway: const UnusedPermissionGateway(),
             doseNotifier: const UnusedDoseNotifier(),
+            reconciliationStateStore: const UnusedReconciliationStateStore(),
           ),
         ),
       );
@@ -478,6 +484,7 @@ void main() {
             doseRepository: const UnusedDoseRepository(),
             permissionGateway: const UnusedPermissionGateway(),
             doseNotifier: const UnusedDoseNotifier(),
+            reconciliationStateStore: const UnusedReconciliationStateStore(),
           ),
         ),
       );
@@ -962,6 +969,15 @@ Future<FakeOnboardingStateStore> _pumpApp(
         // tests about something else entirely.
         permissionGatewayProvider.overrideWithValue(
           permissionGateway ?? FakePermissionGateway(),
+        ),
+        // Story 3.5: `HomePlanController.build()`'s first act is now
+        // `Reconciler.run()`, which reads both of these. Neither is this
+        // file's own concern (that is `reconciler_test.dart`'s), so a plain
+        // no-op notifier and the same database's own settings row are enough
+        // to let a test that reaches Home complete.
+        doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
+        reconciliationStateStoreProvider.overrideWithValue(
+          DriftReconciliationStateStore(database),
         ),
       ],
     ),

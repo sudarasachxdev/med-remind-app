@@ -21,12 +21,15 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
+import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
+import 'package:med_remind_app/app/reconciliation_state_store_provider.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/dose_state.dart';
 import 'package:med_remind_app/domain/port/clock.dart';
@@ -37,6 +40,7 @@ import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
 import 'package:med_remind_app/domain/port/permission_gateway.dart';
+import 'package:med_remind_app/domain/port/reconciliation_state_store.dart';
 import 'package:med_remind_app/domain/service/dose_recorder.dart';
 import 'package:med_remind_app/features/home/application/home_plan_controller.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
@@ -86,6 +90,14 @@ void main() {
         doseRepositoryProvider.overrideWithValue(doses),
         clockProvider.overrideWithValue(clock),
         permissionGatewayProvider.overrideWithValue(permissionGateway),
+        // Story 3.5: `build()`'s first act is now `Reconciler.run()`, which
+        // reads both of these. Neither is this file's own concern (that is
+        // `reconciler_test.dart`'s), so a plain no-op notifier and the same
+        // database's own settings row are enough to let `build()` complete.
+        doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
+        reconciliationStateStoreProvider.overrideWithValue(
+          DriftReconciliationStateStore(database),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -174,6 +186,16 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(instant: now ?? defaultNow)),
         permissionGatewayProvider.overrideWithValue(
           permissionGateway ?? FakePermissionGateway(),
+        ),
+        doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
+        // A fresh in-memory store each remount: this helper is about proving
+        // Home re-reads live medicine/dose data with no manual refresh, not
+        // about zone-change behaviour (`reconciler_test.dart`'s own concern),
+        // so a store with no persisted zone is exactly "first run" every
+        // time, which reacts to nothing and costs this file's assertions
+        // nothing either.
+        reconciliationStateStoreProvider.overrideWithValue(
+          _InMemoryReconciliationStateStore(),
         ),
       ],
     );
@@ -471,6 +493,10 @@ void main() {
               clockProvider.overrideWithValue(FixedClock(instant: defaultNow)),
               permissionGatewayProvider.overrideWithValue(
                 FakePermissionGateway(),
+              ),
+              doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
+              reconciliationStateStoreProvider.overrideWithValue(
+                _InMemoryReconciliationStateStore(),
               ),
             ],
           );
@@ -895,4 +921,19 @@ void main() {
       expect(plan.budgetExceeded, isFalse);
     });
   });
+}
+
+/// A `ReconciliationStateStore` that remembers nothing beyond its own
+/// lifetime -- good enough for [remount]'s default, which needs a real
+/// answer to let `Reconciler.run()` complete, not a persisted one:
+/// zone-change behaviour is `reconciler_test.dart`'s own concern.
+final class _InMemoryReconciliationStateStore
+    implements ReconciliationStateStore {
+  String? _zone;
+
+  @override
+  Future<String?> lastKnownIanaTimezone() async => _zone;
+
+  @override
+  Future<void> saveLastKnownIanaTimezone(String zone) async => _zone = zone;
 }

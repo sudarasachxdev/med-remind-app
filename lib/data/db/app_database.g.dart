@@ -34,8 +34,23 @@ class $AppSettingsTable extends AppSettings
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _lastKnownIanaTimezoneMeta =
+      const VerificationMeta('lastKnownIanaTimezone');
   @override
-  List<GeneratedColumn> get $columns => [id, onboardingCompleted];
+  late final GeneratedColumn<String> lastKnownIanaTimezone =
+      GeneratedColumn<String>(
+        'last_known_iana_timezone',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    onboardingCompleted,
+    lastKnownIanaTimezone,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -60,6 +75,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('last_known_iana_timezone')) {
+      context.handle(
+        _lastKnownIanaTimezoneMeta,
+        lastKnownIanaTimezone.isAcceptableOrUnknown(
+          data['last_known_iana_timezone']!,
+          _lastKnownIanaTimezoneMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -77,6 +101,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}onboarding_completed'],
       )!,
+      lastKnownIanaTimezone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_known_iana_timezone'],
+      ),
     );
   }
 
@@ -102,12 +130,29 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   /// Defaults to `false` so that a row inserted for some other setting does not
   /// silently claim onboarding was seen.
   final bool onboardingCompleted;
-  const AppSetting({required this.id, required this.onboardingCompleted});
+
+  /// The device's IANA zone identifier as of the most recent
+  /// `Reconciler.run()`, or `null` before the first run ever (Story 3.5,
+  /// AD-9).
+  ///
+  /// Nullable, with no default: `null` is a genuinely different fact from any
+  /// real zone -- it is what makes a first run distinguishable from "the zone
+  /// changed FROM something", which `Reconciler` must not treat as a change to
+  /// react to (nothing was generated under a wrong zone to begin with).
+  final String? lastKnownIanaTimezone;
+  const AppSetting({
+    required this.id,
+    required this.onboardingCompleted,
+    this.lastKnownIanaTimezone,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['onboarding_completed'] = Variable<bool>(onboardingCompleted);
+    if (!nullToAbsent || lastKnownIanaTimezone != null) {
+      map['last_known_iana_timezone'] = Variable<String>(lastKnownIanaTimezone);
+    }
     return map;
   }
 
@@ -115,6 +160,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     return AppSettingsCompanion(
       id: Value(id),
       onboardingCompleted: Value(onboardingCompleted),
+      lastKnownIanaTimezone: lastKnownIanaTimezone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastKnownIanaTimezone),
     );
   }
 
@@ -128,6 +176,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       onboardingCompleted: serializer.fromJson<bool>(
         json['onboardingCompleted'],
       ),
+      lastKnownIanaTimezone: serializer.fromJson<String?>(
+        json['lastKnownIanaTimezone'],
+      ),
     );
   }
   @override
@@ -136,12 +187,22 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'onboardingCompleted': serializer.toJson<bool>(onboardingCompleted),
+      'lastKnownIanaTimezone': serializer.toJson<String?>(
+        lastKnownIanaTimezone,
+      ),
     };
   }
 
-  AppSetting copyWith({int? id, bool? onboardingCompleted}) => AppSetting(
+  AppSetting copyWith({
+    int? id,
+    bool? onboardingCompleted,
+    Value<String?> lastKnownIanaTimezone = const Value.absent(),
+  }) => AppSetting(
     id: id ?? this.id,
     onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+    lastKnownIanaTimezone: lastKnownIanaTimezone.present
+        ? lastKnownIanaTimezone.value
+        : this.lastKnownIanaTimezone,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -149,6 +210,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       onboardingCompleted: data.onboardingCompleted.present
           ? data.onboardingCompleted.value
           : this.onboardingCompleted,
+      lastKnownIanaTimezone: data.lastKnownIanaTimezone.present
+          ? data.lastKnownIanaTimezone.value
+          : this.lastKnownIanaTimezone,
     );
   }
 
@@ -156,50 +220,62 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   String toString() {
     return (StringBuffer('AppSetting(')
           ..write('id: $id, ')
-          ..write('onboardingCompleted: $onboardingCompleted')
+          ..write('onboardingCompleted: $onboardingCompleted, ')
+          ..write('lastKnownIanaTimezone: $lastKnownIanaTimezone')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, onboardingCompleted);
+  int get hashCode =>
+      Object.hash(id, onboardingCompleted, lastKnownIanaTimezone);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is AppSetting &&
           other.id == this.id &&
-          other.onboardingCompleted == this.onboardingCompleted);
+          other.onboardingCompleted == this.onboardingCompleted &&
+          other.lastKnownIanaTimezone == this.lastKnownIanaTimezone);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<int> id;
   final Value<bool> onboardingCompleted;
+  final Value<String?> lastKnownIanaTimezone;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.onboardingCompleted = const Value.absent(),
+    this.lastKnownIanaTimezone = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
     this.onboardingCompleted = const Value.absent(),
+    this.lastKnownIanaTimezone = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
     Expression<bool>? onboardingCompleted,
+    Expression<String>? lastKnownIanaTimezone,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (onboardingCompleted != null)
         'onboarding_completed': onboardingCompleted,
+      if (lastKnownIanaTimezone != null)
+        'last_known_iana_timezone': lastKnownIanaTimezone,
     });
   }
 
   AppSettingsCompanion copyWith({
     Value<int>? id,
     Value<bool>? onboardingCompleted,
+    Value<String?>? lastKnownIanaTimezone,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      lastKnownIanaTimezone:
+          lastKnownIanaTimezone ?? this.lastKnownIanaTimezone,
     );
   }
 
@@ -212,6 +288,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     if (onboardingCompleted.present) {
       map['onboarding_completed'] = Variable<bool>(onboardingCompleted.value);
     }
+    if (lastKnownIanaTimezone.present) {
+      map['last_known_iana_timezone'] = Variable<String>(
+        lastKnownIanaTimezone.value,
+      );
+    }
     return map;
   }
 
@@ -219,7 +300,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   String toString() {
     return (StringBuffer('AppSettingsCompanion(')
           ..write('id: $id, ')
-          ..write('onboardingCompleted: $onboardingCompleted')
+          ..write('onboardingCompleted: $onboardingCompleted, ')
+          ..write('lastKnownIanaTimezone: $lastKnownIanaTimezone')
           ..write(')'))
         .toString();
   }
@@ -2724,11 +2806,13 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
       Value<int> id,
       Value<bool> onboardingCompleted,
+      Value<String?> lastKnownIanaTimezone,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
       Value<int> id,
       Value<bool> onboardingCompleted,
+      Value<String?> lastKnownIanaTimezone,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -2747,6 +2831,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get onboardingCompleted => $composableBuilder(
     column: $table.onboardingCompleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastKnownIanaTimezone => $composableBuilder(
+    column: $table.lastKnownIanaTimezone,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2769,6 +2858,11 @@ class $$AppSettingsTableOrderingComposer
     column: $table.onboardingCompleted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get lastKnownIanaTimezone => $composableBuilder(
+    column: $table.lastKnownIanaTimezone,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -2785,6 +2879,11 @@ class $$AppSettingsTableAnnotationComposer
 
   GeneratedColumn<bool> get onboardingCompleted => $composableBuilder(
     column: $table.onboardingCompleted,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastKnownIanaTimezone => $composableBuilder(
+    column: $table.lastKnownIanaTimezone,
     builder: (column) => column,
   );
 }
@@ -2822,17 +2921,21 @@ class $$AppSettingsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<bool> onboardingCompleted = const Value.absent(),
+                Value<String?> lastKnownIanaTimezone = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 onboardingCompleted: onboardingCompleted,
+                lastKnownIanaTimezone: lastKnownIanaTimezone,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 Value<bool> onboardingCompleted = const Value.absent(),
+                Value<String?> lastKnownIanaTimezone = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 onboardingCompleted: onboardingCompleted,
+                lastKnownIanaTimezone: lastKnownIanaTimezone,
               ),
           withReferenceMapper: (p0) => p0
               .map(

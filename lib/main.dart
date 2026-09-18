@@ -31,12 +31,15 @@ import 'data/db/app_database.dart';
 import 'data/repository/drift_dose_repository.dart';
 import 'data/repository/drift_medicine_repository.dart';
 import 'data/repository/drift_onboarding_state_store.dart';
+import 'data/repository/drift_reconciliation_state_store.dart';
 import 'domain/port/clock.dart';
 import 'domain/port/dose_notifier.dart';
 import 'domain/port/dose_repository.dart';
 import 'domain/port/medicine_repository.dart';
 import 'domain/port/onboarding_state_store.dart';
 import 'domain/port/permission_gateway.dart';
+import 'domain/port/reconciliation_state_store.dart';
+import 'features/home/application/home_plan_controller.dart';
 import 'platform/notifications/flutter_local_notifications_dose_notifier.dart';
 import 'platform/permissions/flutter_local_notifications_permission_gateway.dart';
 
@@ -62,6 +65,12 @@ Future<void> main() async {
     database,
   );
   final DoseRepository doseRepository = DriftDoseRepository(database);
+  // Story 3.5: the same `app_settings` row `store` above reads its own column
+  // on, through a second, targeted adapter -- see that adapter's own comment
+  // for why this is a new port rather than a second method on
+  // `OnboardingStateStore`.
+  final ReconciliationStateStore reconciliationStateStore =
+      DriftReconciliationStateStore(database);
   // AD-17's sole authority for notification/exact-alarm permission. Owns
   // nothing and opens nothing (unlike `database` above), so it is
   // constructed here with everything else rather than resolved asynchronously
@@ -101,6 +110,7 @@ Future<void> main() async {
         doseRepository: doseRepository,
         permissionGateway: permissionGateway,
         doseNotifier: doseNotifier,
+        reconciliationStateStore: reconciliationStateStore,
       ),
     ),
   );
@@ -129,11 +139,51 @@ class MediTrackerApp extends StatelessWidget {
   }
 }
 
-class _MediTrackerAppView extends ConsumerWidget {
+/// AD-9, Story 3.5: foreground is one of the three reconciliation triggers.
+/// `ConsumerStatefulWidget` mixing in `WidgetsBindingObserver` is what lets
+/// this widget hear `AppLifecycleState.resumed` at all -- a `ConsumerWidget`
+/// has no lifecycle hook of its own, and `AppLifecycleListener` (the
+/// callback-based alternative `startup.dart`'s `closeDatabaseOnDetach` uses
+/// for `detached`) is a poorer fit here because this class already needs
+/// `State` for `initState`/`dispose` to register and unregister the observer.
+///
+/// On resume, this invalidates `homePlanControllerProvider` rather than
+/// calling `Reconciler.run()` itself -- AD-9's "nothing else in the codebase
+/// re-registers notifications" is kept true by funnelling every trigger
+/// through the one provider whose `build()` calls `Reconciler.run()`
+/// (`home_plan_controller.dart`'s own file comment), rather than adding a
+/// second call site here.
+class _MediTrackerAppView extends ConsumerStatefulWidget {
   const _MediTrackerAppView();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MediTrackerAppView> createState() =>
+      _MediTrackerAppViewState();
+}
+
+class _MediTrackerAppViewState extends ConsumerState<_MediTrackerAppView>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(homePlanControllerProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'MediTracker',
       // One theme. No `darkTheme`, no `themeMode`: UX-DR22 puts dark mode out

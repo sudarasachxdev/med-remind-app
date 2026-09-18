@@ -1,4 +1,4 @@
-// The application database, at schema version 4.
+// The application database, at schema version 5.
 //
 // AD-3 — one process opens the database. One `AppDatabase` is constructed, in
 // `lib/main.dart`, and handed to the adapters that need it. Nothing else calls
@@ -11,15 +11,18 @@
 // pre-existing gap -- FR-11's reminders-disabled toggle was already wired from
 // the add-medicine UI down to `AddMedicineDraft` and silently discarded at the
 // one call site that persists it, because `Schedule`/the schema had nowhere to
-// receive it until now. All three landed by MIGRATING: an installed app
-// already holds a file carrying the user's onboarding flag (and, from v2
-// onward, real medicines and schedules), and recreating it would be a
-// data-loss bug on the one part of this codebase whose subject is not losing
-// data. So every version has two paths that must agree with each other --
-// `onCreate` builds every table for a fresh install, `onUpgrade` creates only
-// what a given stored version is missing, and `test/db_migration_test.dart`
-// compares the two resulting schemas against drift's generated fixtures rather
-// than asserting they match.
+// receive it until now. Version 5 (Story 3.5) adds
+// [AppSettings.lastKnownIanaTimezone] -- the fact `Reconciler` compares the
+// device's current zone against to detect a device timezone change (AD-9).
+// All four landed by MIGRATING: an installed app already holds a file
+// carrying the user's onboarding flag (and, from v2 onward, real medicines and
+// schedules), and recreating it would be a data-loss bug on the one part of
+// this codebase whose subject is not losing data. So every version has two
+// paths that must agree with each other -- `onCreate` builds every table for
+// a fresh install, `onUpgrade` creates only what a given stored version is
+// missing, and `test/db_migration_test.dart` compares the two resulting
+// schemas against drift's generated fixtures rather than asserting they
+// match.
 //
 // There is deliberately no `deleteOnFailure`-style recovery: the spine
 // prohibits it (AD-15, AD-18), and a health record with no cloud copy must
@@ -27,7 +30,12 @@
 //
 // Story 1.7a owns `doses`. `DoseRepository`/`DriftDoseRepository` read and
 // write it. Story 3.3 owns `schedules.reminders_enabled` alone -- no new
-// table, no other column.
+// table, no other column. Story 3.5 owns
+// `app_settings.last_known_iana_timezone` alone -- and because `app_settings`
+// has existed since v1 (unlike `schedules`, which did not exist until v2),
+// EVERY pre-v5 branch below needs its own `addColumn` for it, not only the
+// newest one -- exactly the same shape Story 3.3's `reminders_enabled`
+// needed across the pre-v4 branches that predated it.
 
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -78,6 +86,16 @@ class AppSettings extends Table {
   /// silently claim onboarding was seen.
   BoolColumn get onboardingCompleted =>
       boolean().withDefault(const Constant(false))();
+
+  /// The device's IANA zone identifier as of the most recent
+  /// `Reconciler.run()`, or `null` before the first run ever (Story 3.5,
+  /// AD-9).
+  ///
+  /// Nullable, with no default: `null` is a genuinely different fact from any
+  /// real zone -- it is what makes a first run distinguishable from "the zone
+  /// changed FROM something", which `Reconciler` must not treat as a change to
+  /// react to (nothing was generated under a wrong zone to begin with).
+  TextColumn get lastKnownIanaTimezone => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -394,8 +412,9 @@ class Doses extends Table {
   ];
 }
 
-/// The Drift database. Schema version 4: [AppSettings], [Medicines],
-/// [Schedules] (now with [Schedules.remindersEnabled], Story 3.3) and [Doses].
+/// The Drift database. Schema version 5: [AppSettings] (now with
+/// [AppSettings.lastKnownIanaTimezone], Story 3.5), [Medicines], [Schedules]
+/// (with [Schedules.remindersEnabled], Story 3.3) and [Doses].
 @DriftDatabase(tables: [AppSettings, Medicines, Schedules, Doses])
 class AppDatabase extends _$AppDatabase {
   /// Opens the on-device database, or [executor] when one is supplied.
@@ -406,7 +425,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: appDatabaseName));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -439,49 +458,67 @@ class AppDatabase extends _$AppDatabase {
       // named as its own exact pair -- there is no implicit chaining from
       // one step to the next.
       //
-      // `to == 4` for all three pairs below because that is this build's only
+      // `to == 5` for all four pairs below because that is this build's only
       // possible value for it; written literally anyway, matching the exact-
       // pair style the 1 -> 2 step used, so a future story adds a pair rather
       // than relaxing one.
-      if (from == 1 && to == 4) {
+      if (from == 1 && to == 5) {
         // A v1 install (Story 1.3) updating straight to this build, having
-        // skipped every version in between. `app_settings` is not touched, so
-        // the onboarding flag it carries survives untouched. Creates every
-        // table added since v1 -- medicines and schedules (Story 1.4), doses
-        // (Story 1.7a) -- because this callback will not be invoked again for
-        // the versions in between. `createTable(schedules)` builds from
-        // TODAY's `Schedules` definition, which already carries
-        // `remindersEnabled` (Story 3.3) -- there is no separate `addColumn`
-        // call for it here, unlike the 2 -> 4 and 3 -> 4 branches below,
-        // because a v1 install never had a `schedules` table to add the
-        // column onto; it gets the full v4 shape in one `createTable`.
+        // skipped every version in between. Creates every table added since
+        // v1 -- medicines and schedules (Story 1.4), doses (Story 1.7a) --
+        // because this callback will not be invoked again for the versions in
+        // between. `createTable(schedules)` builds from TODAY's `Schedules`
+        // definition, which already carries `remindersEnabled` (Story 3.3) --
+        // there is no separate `addColumn` call for it here, unlike the
+        // 2 -> 5 and 3 -> 5 branches below, because a v1 install never had a
+        // `schedules` table to add the column onto; it gets the full v4 shape
+        // in one `createTable`. `app_settings`, unlike `schedules`, DID
+        // already exist at v1 -- it is not recreated here, so
+        // `lastKnownIanaTimezone` (Story 3.5) needs its own `addColumn` onto
+        // the pre-existing row shape, exactly as the other three branches do.
         await transaction(() async {
           await m.createTable(medicines);
           await m.createTable(schedules);
           await m.createTable(doses);
+          await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
         });
         return;
       }
 
-      if (from == 2 && to == 4) {
+      if (from == 2 && to == 5) {
         // A v2 install (Story 1.4 through 1.6): `medicines` and `schedules`
         // already exist, as that version's app actually wrote them -- without
         // `remindersEnabled`, which did not exist yet. `doses` (Story 1.7a) is
         // created fresh, exactly as the old 2 -> 3 step did; `remindersEnabled`
         // is added onto the pre-existing `schedules` row shape, exactly as the
-        // 3 -> 4 step below does for a v3 install.
+        // 3 -> 5 step below does for a v3 install, and
+        // `lastKnownIanaTimezone` is added onto the pre-existing
+        // `app_settings` row shape, exactly as every other branch here does.
         await transaction(() async {
           await m.createTable(doses);
           await m.addColumn(schedules, schedules.remindersEnabled);
+          await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
         });
         return;
       }
 
-      if (from == 3 && to == 4) {
+      if (from == 3 && to == 5) {
         // A v3 install (Story 1.7a through Story 3.2): every table already
-        // exists. This story's one schema change is the new column.
+        // exists. Story 3.3's column and Story 3.5's column both land on a
+        // pre-existing row shape.
         await transaction(() async {
           await m.addColumn(schedules, schedules.remindersEnabled);
+          await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
+        });
+        return;
+      }
+
+      if (from == 4 && to == 5) {
+        // A v4 install (Story 3.3 through Story 3.4): every table and every
+        // column through `remindersEnabled` already exists. This story's one
+        // schema change is the new column.
+        await transaction(() async {
+          await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
         });
         return;
       }
@@ -490,7 +527,7 @@ class AppDatabase extends _$AppDatabase {
       // mandatory -- or a downgrade. Both must fail loudly rather than run the
       // app against a schema that does not match the code. `1 -> 2` was this
       // branch's answer through Story 1.4 through 1.6; it is retired here, not
-      // widened alongside the two pairs above, because `to` can no longer be
+      // widened alongside the pairs above, because `to` can no longer be
       // 2 -- keeping a case this build will never be asked for would be dead
       // code pretending to be a migration step.
       throw AppDatabaseVersionMismatch(storedVersion: from, appVersion: to);

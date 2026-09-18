@@ -35,6 +35,7 @@ import '../../../domain/model/domain_failure.dart';
 import '../../../domain/model/medicine.dart';
 import '../../../domain/port/clock.dart';
 import '../../../domain/port/medicine_repository.dart';
+import '../../home/application/home_plan_controller.dart';
 import '../domain/add_medicine_draft.dart';
 import '../presentation/add_medicine_copy.dart';
 
@@ -362,6 +363,12 @@ class AddMedicineController extends AutoDisposeNotifier<AddMedicineFlow> {
     }
 
     state = state.copyWith(saving: false);
+    // AD-9, Story 3.5: mutation is one of the three reconciliation triggers.
+    // Invalidating rather than calling `Reconciler.run()` directly keeps that
+    // call single-sited inside `HomePlanController.build()` -- the next read
+    // of `homePlanControllerProvider` (Home's own remount) reconciles as part
+    // of rebuilding, exactly as a cold start or a foreground resume does.
+    ref.invalidate(homePlanControllerProvider);
     return true;
   }
 

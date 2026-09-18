@@ -29,10 +29,12 @@ import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
+import 'package:med_remind_app/app/reconciliation_state_store_provider.dart';
 import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
@@ -153,6 +155,13 @@ void main() {
           permissionGatewayProvider.overrideWithValue(
             permissionGateway ?? FakePermissionGateway(),
           ),
+          // Story 3.5: `build()`'s first act is now `Reconciler.run()`,
+          // which reads this. The same database's own settings row is
+          // enough to let it complete; zone-change behaviour is
+          // `reconciler_test.dart`'s own concern.
+          reconciliationStateStoreProvider.overrideWithValue(
+            DriftReconciliationStateStore(database),
+          ),
         ],
         child: const MaterialApp(home: HomeScreen()),
       ),
@@ -223,6 +232,9 @@ void main() {
           ),
           permissionGatewayProvider.overrideWithValue(
             permissionGateway ?? FakePermissionGateway(),
+          ),
+          reconciliationStateStoreProvider.overrideWithValue(
+            DriftReconciliationStateStore(database),
           ),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -1338,6 +1350,9 @@ void main() {
               permissionGatewayProvider.overrideWithValue(
                 FakePermissionGateway(),
               ),
+              reconciliationStateStoreProvider.overrideWithValue(
+                DriftReconciliationStateStore(database),
+              ),
             ],
             child: const MaterialApp(home: HomeScreen()),
           ),
@@ -1384,6 +1399,9 @@ void main() {
               clockProvider.overrideWithValue(FixedClock(instant: defaultNow)),
               permissionGatewayProvider.overrideWithValue(
                 FakePermissionGateway(),
+              ),
+              reconciliationStateStoreProvider.overrideWithValue(
+                DriftReconciliationStateStore(database),
               ),
             ],
             child: const MaterialApp(home: HomeScreen()),

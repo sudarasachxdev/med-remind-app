@@ -1,24 +1,26 @@
-// Home's one provider: calls the provisional generation step, reads today's
-// Doses, resolves each, and exposes exactly the data the fixed vertical order
-// (UX-DR23) renders.
+// Home's one provider: runs reconciliation, reads today's Doses, resolves
+// each, and exposes exactly the data the fixed vertical order (UX-DR23)
+// renders.
 //
 // AD-13, hand-written: one provider per file, named `<subject>Provider`, built
 // from `AsyncNotifierProvider` -- the async sibling of `AddMedicineController`'s
 // `NotifierProvider`, needed here because this controller's own first act is
-// two awaited calls (generate, then read) before it has anything to expose.
+// two awaited calls (reconcile, then read) before it has anything to expose.
 // `autoDispose`, for the same reason `AddMedicineController` is: Home is
 // reached fresh on every route arrival in this app (there is no tab bar yet,
 // Epic 4), so a provider that outlived the screen would go on being the one
 // source `test/story_scope_test.dart`'s "no manual refresh" claim depends on,
 // with nothing left watching it.
 //
-// AD-9, AMENDED 2026-09-10. Before `Reconciler` exists (Epic 3), Home's
-// provider layer may call `DoseGenerator.generate(now)` directly -- exactly
-// that one step, never the full five-step pipeline, and never anything that
-// registers or cancels a notification. [_provisionalDoseGeneration] is the
-// named exception the amendment describes: a reader cannot mistake it for
-// `Reconciler.run()`, and Epic 3 replaces this call site rather than adding a
-// second one beside it.
+// AD-9, STORY 3.5. `build()`'s first act is `Reconciler.run()` -- the one
+// production call site AD-9 names ("nothing else in the codebase re-registers
+// notifications"). Epic 1's `_provisionalDoseGeneration` stopgap (the amended
+// AD-9's named exception, which called only `DoseGenerator.generate(now)`
+// directly) is retired: every trigger (cold start, foreground, mutation)
+// funnels into this one call by invalidating this provider, rather than
+// calling `Reconciler.run()` a second or third time -- see `lib/main.dart`'s
+// `WidgetsBindingObserver` and `AddMedicineController.save`'s own
+// `ref.invalidate` call.
 //
 // AD-21. `build()` is `async`, and its first two lines are both awaited I/O:
 // nothing here runs synchronously to completion, so the widget that watches
@@ -31,10 +33,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/clock_provider.dart';
-import '../../../app/dose_generator_provider.dart';
 import '../../../app/dose_repository_provider.dart';
 import '../../../app/medicine_repository_provider.dart';
 import '../../../app/permission_gateway_provider.dart';
+import '../../../app/reconciler_provider.dart';
 import '../../../domain/model/dose.dart';
 import '../../../domain/model/dose_state.dart';
 import '../../../domain/model/medicine.dart';
@@ -207,7 +209,7 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
   Future<HomePlan> build() async {
     final DateTime now = ref.read(clockProvider).now();
 
-    await _provisionalDoseGeneration(now);
+    await ref.read(reconcilerProvider).run();
     final bool notificationsDenied = !await _notificationsCurrentlyEnabled();
     final bool exactAlarmsDenied = !await _exactAlarmsCurrentlyAllowed();
 
@@ -322,15 +324,8 @@ class HomePlanController extends AutoDisposeAsyncNotifier<HomePlan> {
     );
   }
 
-  /// AD-9, amended 2026-09-10: the one permitted step of the eventual
-  /// `Reconciler.run()`, and only that step. Named so that no reader mistakes
-  /// it for the real thing -- Epic 3 replaces this call site, it does not add
-  /// a second one beside it.
-  Future<void> _provisionalDoseGeneration(DateTime now) =>
-      ref.read(doseGeneratorProvider).generate(now);
-
   /// Story 3.1b's own "one more await before assembling the plan", following
-  /// [_provisionalDoseGeneration]'s exact shape. Reads
+  /// the reconciliation call's exact shape. Reads
   /// [PermissionGateway.areNotificationsEnabled] fresh on every `build()` --
   /// never a cached flag -- so [HomePlan.notificationsDenied] can never
   /// report a permission state the OS no longer holds.

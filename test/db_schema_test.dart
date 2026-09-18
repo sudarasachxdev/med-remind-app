@@ -17,10 +17,12 @@
 //
 // This also pins the schema's scope at each version: `app_settings`,
 // `medicines` and `schedules` were the only tables through Story 1.6; `doses`
-// (Story 1.7a) is the fourth and, for now, the last table. Story 3.3 adds no
+// (Story 1.7a) is the fourth and, for now, the last table. Story 3.3 added no
 // table -- only `schedules.reminders_enabled`, closing the pre-existing gap
 // where FR-11's toggle was wired from the UI down to `AddMedicineDraft` and
-// silently discarded at the one call site that persists it.
+// silently discarded at the one call site that persists it. Story 3.5 adds no
+// table either -- only `app_settings.last_known_iana_timezone`, the fact
+// `Reconciler` compares the device's current zone against (AD-9).
 
 import 'dart:io';
 
@@ -49,16 +51,16 @@ void main() {
     await database.close();
   });
 
-  group('AppDatabase at schema version 4', () {
-    test('declares version 4', () {
+  group('AppDatabase at schema version 5', () {
+    test('declares version 5', () {
       expect(
         database.schemaVersion,
-        4,
+        5,
         reason:
-            'AD-15: adding schedules.reminders_enabled is a schema change, '
-            'so the version bumps. Leaving it at 3 would mean an installed '
-            'app never calls onUpgrade and runs this story\'s code against '
-            'the old schema.',
+            'AD-15: adding app_settings.last_known_iana_timezone is a schema '
+            'change, so the version bumps. Leaving it at 4 would mean an '
+            'installed app never calls onUpgrade and runs this story\'s code '
+            'against the old schema.',
       );
     });
 
@@ -74,7 +76,8 @@ void main() {
       );
     });
 
-    test('app_settings holds exactly id and onboarding_completed', () async {
+    test('app_settings holds exactly id, onboarding_completed and '
+        'last_known_iana_timezone', () async {
       final List<Map<String, Object?>> columns = await _tableInfo(
         database,
         'app_settings',
@@ -82,10 +85,14 @@ void main() {
 
       expect(
         columns.map((Map<String, Object?> c) => c['name']).toList(),
-        equals(<String>['id', 'onboarding_completed']),
+        equals(<String>[
+          'id',
+          'onboarding_completed',
+          'last_known_iana_timezone',
+        ]),
       );
 
-      final Map<String, Object?> id = columns.first;
+      final Map<String, Object?> id = columns[0];
       expect(id['type'], 'INTEGER');
       expect(id['notnull'], 1, reason: 'the settings row must have an id');
       expect(id['pk'], 1, reason: 'id is the primary key');
@@ -95,7 +102,7 @@ void main() {
         reason: 'a row inserted without an id is the settings row',
       );
 
-      final Map<String, Object?> flag = columns.last;
+      final Map<String, Object?> flag = columns[1];
       expect(
         flag['type'],
         'INTEGER',
@@ -109,6 +116,23 @@ void main() {
             'a settings row written for some other setting must not claim '
             'onboarding was seen',
       );
+
+      final Map<String, Object?> zone = columns[2];
+      expect(
+        zone['type'],
+        'TEXT',
+        reason: 'an IANA identifier such as Asia/Colombo, stored as text',
+      );
+      expect(
+        zone['notnull'],
+        0,
+        reason:
+            'null means "no Reconciler run has recorded a zone yet", a '
+            'genuinely different fact from any real zone -- Story 3.5\'s '
+            'own first-run rule depends on this being nullable rather than '
+            'defaulted to some placeholder zone',
+      );
+      expect(zone['dflt_value'], isNull);
     });
 
     test(
@@ -167,7 +191,7 @@ void main() {
             .customSelect('PRAGMA user_version')
             .get();
 
-        expect(rows.single.data['user_version'], 4);
+        expect(rows.single.data['user_version'], 5);
       },
     );
 
@@ -227,7 +251,7 @@ void main() {
             'install left behind. Found: '
             '${directory.listSync().map((FileSystemEntity e) => e.uri.pathSegments.last).toList()}',
       );
-      expect(production.schemaVersion, 4);
+      expect(production.schemaVersion, 5);
     });
   });
 
@@ -245,16 +269,16 @@ void main() {
       addTearDown(() => directory.delete(recursive: true));
       final File file = File('${directory.path}/db.sqlite');
 
-      // A file written by a future build: schema version 5. It has to be
-      // ABOVE this build's version, and this build is now at 4 -- a test that
+      // A file written by a future build: schema version 6. It has to be
+      // ABOVE this build's version, and this build is now at 5 -- a test that
       // kept writing an old number here would silently stop testing a
       // downgrade the moment the app reached that version, which is exactly
       // what happened to this line as the app moved from Story 1.3's version
-      // through Story 1.4's and Story 1.7a's, and has now happened again
-      // moving to this story's.
+      // through Story 1.4's, Story 1.7a's and Story 3.3's, and has now
+      // happened again moving to this story's.
       final AppDatabase future = AppDatabase(NativeDatabase(file));
       await future.customSelect('SELECT 1').get();
-      await future.customStatement('PRAGMA user_version = 5');
+      await future.customStatement('PRAGMA user_version = 6');
       await future.close();
 
       final AppDatabase current = AppDatabase(NativeDatabase(file));
@@ -267,12 +291,12 @@ void main() {
               .having(
                 (AppDatabaseVersionMismatch e) => e.storedVersion,
                 'storedVersion',
-                5,
+                6,
               )
               .having(
                 (AppDatabaseVersionMismatch e) => e.appVersion,
                 'appVersion',
-                4,
+                5,
               )
               .having(
                 (AppDatabaseVersionMismatch e) => e.isDowngrade,
@@ -336,7 +360,7 @@ void main() {
       await future.customStatement(
         'CREATE TABLE a_table_from_the_future (x INTEGER)',
       );
-      await future.customStatement('PRAGMA user_version = 5');
+      await future.customStatement('PRAGMA user_version = 6');
       await future.close();
       final int sizeBefore = file.lengthSync();
 
@@ -833,7 +857,7 @@ void main() {
           .get();
       expect(
         version.single.data['user_version'],
-        4,
+        5,
         reason:
             'the version has to come back off disk, or onUpgrade never fires',
       );

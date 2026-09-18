@@ -25,6 +25,7 @@ import '../domain/port/dose_repository.dart';
 import '../domain/port/medicine_repository.dart';
 import '../domain/port/onboarding_state_store.dart';
 import '../domain/port/permission_gateway.dart';
+import '../domain/port/reconciliation_state_store.dart';
 import '../platform/clock/system_clock.dart';
 import 'clock_provider.dart';
 import 'dose_notifier_provider.dart';
@@ -33,6 +34,7 @@ import 'medicine_repository_provider.dart';
 import 'onboarding_completed_at_startup_provider.dart';
 import 'onboarding_state_store_provider.dart';
 import 'permission_gateway_provider.dart';
+import 'reconciliation_state_store_provider.dart';
 
 /// The `dart:developer` log source for startup. Logging is local-only (NFR-6
 /// forbids a crash reporter), so this name is how a developer finds it.
@@ -183,6 +185,13 @@ Future<Clock> resolveClockAtStartup({
 /// A launch with no override would throw the moment any Dose is recorded
 /// (`DoseRecorder.take`/`skip`/`snooze`), not merely leave scheduling
 /// unreachable.
+///
+/// [reconciliationStateStore] is Story 3.5's addition, the eighth binding.
+/// `reconciliationStateStoreProvider` uses the same no-safe-default (throws)
+/// pattern as every port bound above -- `Reconciler.run()` is
+/// `HomePlanController.build()`'s own first act (AD-9) from this story
+/// onward, so a launch with no override would throw the moment Home's
+/// provider first runs, exactly as a missing [permissionGateway] would.
 List<Override> startupOverrides({
   required OnboardingStateStore store,
   required bool completed,
@@ -191,6 +200,7 @@ List<Override> startupOverrides({
   required DoseRepository doseRepository,
   required PermissionGateway permissionGateway,
   required DoseNotifier doseNotifier,
+  required ReconciliationStateStore reconciliationStateStore,
 }) {
   return <Override>[
     onboardingStateStoreProvider.overrideWithValue(store),
@@ -200,6 +210,9 @@ List<Override> startupOverrides({
     doseRepositoryProvider.overrideWithValue(doseRepository),
     permissionGatewayProvider.overrideWithValue(permissionGateway),
     doseNotifierProvider.overrideWithValue(doseNotifier),
+    reconciliationStateStoreProvider.overrideWithValue(
+      reconciliationStateStore,
+    ),
   ];
 }
 

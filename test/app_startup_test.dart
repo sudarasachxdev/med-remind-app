@@ -25,6 +25,7 @@ import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
+import 'package:med_remind_app/app/reconciliation_state_store_provider.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
@@ -37,6 +38,7 @@ import 'support/unused_dose_notifier.dart';
 import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
 import 'support/unused_permission_gateway.dart';
+import 'support/unused_reconciliation_state_store.dart';
 import 'support/recording_interceptor.dart';
 
 void main() {
@@ -239,6 +241,7 @@ void main() {
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
           doseNotifier: const UnusedDoseNotifier(),
+          reconciliationStateStore: const UnusedReconciliationStateStore(),
         ),
       );
       addTearDown(container.dispose);
@@ -264,6 +267,7 @@ void main() {
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
           doseNotifier: const UnusedDoseNotifier(),
+          reconciliationStateStore: const UnusedReconciliationStateStore(),
         ),
       );
       addTearDown(completed.dispose);
@@ -283,6 +287,7 @@ void main() {
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
           doseNotifier: const UnusedDoseNotifier(),
+          reconciliationStateStore: const UnusedReconciliationStateStore(),
         ),
       );
       addTearDown(fresh.dispose);
@@ -295,14 +300,16 @@ void main() {
       );
     });
 
-    test('binds all seven providers and nothing else', () {
+    test('binds all eight providers and nothing else', () {
       // A count, and a deliberate pause. It said `hasLength(2)` and "binds
       // both providers" until Story 1.5 added the repository and the clock,
       // `hasLength(4)` until Story 1.8 added the dose repository,
-      // `hasLength(5)` until Story 3.1b added the permission gateway, and
-      // `hasLength(6)` until Story 3.2 added the dose notifier -- each bump is
-      // the assertion that made the addition a decision rather than a silent
-      // widening of the composition root. Bump it when you mean to.
+      // `hasLength(5)` until Story 3.1b added the permission gateway,
+      // `hasLength(6)` until Story 3.2 added the dose notifier, and
+      // `hasLength(7)` until Story 3.5 added the reconciliation state store --
+      // each bump is the assertion that made the addition a decision rather
+      // than a silent widening of the composition root. Bump it when you mean
+      // to.
       expect(
         startupOverrides(
           store: FakeOnboardingStateStore(),
@@ -312,8 +319,9 @@ void main() {
           doseRepository: const UnusedDoseRepository(),
           permissionGateway: const UnusedPermissionGateway(),
           doseNotifier: const UnusedDoseNotifier(),
+          reconciliationStateStore: const UnusedReconciliationStateStore(),
         ),
-        hasLength(7),
+        hasLength(8),
       );
     });
   });
@@ -333,9 +341,12 @@ void main() {
     // a quiet dose-repository default would have Home read an empty plan
     // forever with nothing on screen saying why, a quiet permission-gateway
     // default (Story 3.1b) would report notifications as granted with nothing
-    // real behind that answer, and a quiet dose-notifier default (Story 3.2)
+    // real behind that answer, a quiet dose-notifier default (Story 3.2)
     // would schedule and cancel nothing while a real adapter exists to bind
-    // instead -- AD-14's silent-success failure, from all three directions.
+    // instead, and a quiet reconciliation-state-store default (Story 3.5)
+    // would report "no prior zone" forever, so a real device timezone change
+    // would never be reacted to -- AD-14's silent-success failure, from all
+    // four directions.
     for (final ({String name, ProviderBase<Object?> provider}) target
         in <({String name, ProviderBase<Object?> provider})>[
           (
@@ -349,6 +360,10 @@ void main() {
             provider: permissionGatewayProvider,
           ),
           (name: 'doseNotifierProvider', provider: doseNotifierProvider),
+          (
+            name: 'reconciliationStateStoreProvider',
+            provider: reconciliationStateStoreProvider,
+          ),
         ]) {
       test('${target.name} throws until the composition root binds it', () {
         final container = ProviderContainer();
