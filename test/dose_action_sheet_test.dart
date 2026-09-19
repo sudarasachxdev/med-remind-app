@@ -17,9 +17,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/app/clock_provider.dart';
 import 'package:med_remind_app/app/dose_notifier_provider.dart';
 import 'package:med_remind_app/app/dose_repository_provider.dart';
+import 'package:med_remind_app/app/reminder_settings_store_provider.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
@@ -109,6 +111,9 @@ void main() {
           // implicitly before that story existed.
           doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
           clockProvider.overrideWithValue(FixedClock(instant: now)),
+          reminderSettingsStoreProvider.overrideWithValue(
+            DriftReminderSettingsStore(database),
+          ),
         ],
         child: MaterialApp(
           home: Scaffold(

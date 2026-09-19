@@ -32,6 +32,7 @@ import 'data/repository/drift_dose_repository.dart';
 import 'data/repository/drift_medicine_repository.dart';
 import 'data/repository/drift_onboarding_state_store.dart';
 import 'data/repository/drift_reconciliation_state_store.dart';
+import 'data/repository/drift_reminder_settings_store.dart';
 import 'domain/port/clock.dart';
 import 'domain/port/dose_notifier.dart';
 import 'domain/port/dose_repository.dart';
@@ -39,6 +40,7 @@ import 'domain/port/medicine_repository.dart';
 import 'domain/port/onboarding_state_store.dart';
 import 'domain/port/permission_gateway.dart';
 import 'domain/port/reconciliation_state_store.dart';
+import 'domain/port/reminder_settings_store.dart';
 import 'features/home/application/home_plan_controller.dart';
 import 'platform/notifications/flutter_local_notifications_dose_notifier.dart';
 import 'platform/permissions/flutter_local_notifications_permission_gateway.dart';
@@ -71,6 +73,11 @@ Future<void> main() async {
   // `OnboardingStateStore`.
   final ReconciliationStateStore reconciliationStateStore =
       DriftReconciliationStateStore(database);
+  // Story 3.9: the same `app_settings` row, through a third targeted adapter
+  // -- `DoseGenerator`/`DoseRecorder`'s live source for the app-wide
+  // `ReminderSettings` FR-14 names.
+  final ReminderSettingsStore reminderSettingsStore =
+      DriftReminderSettingsStore(database);
   // AD-17's sole authority for notification/exact-alarm permission. Owns
   // nothing and opens nothing (unlike `database` above), so it is
   // constructed here with everything else rather than resolved asynchronously
@@ -111,6 +118,7 @@ Future<void> main() async {
         permissionGateway: permissionGateway,
         doseNotifier: doseNotifier,
         reconciliationStateStore: reconciliationStateStore,
+        reminderSettingsStore: reminderSettingsStore,
       ),
     ),
   );

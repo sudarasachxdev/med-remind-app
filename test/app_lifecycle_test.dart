@@ -37,6 +37,7 @@ import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
 import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
 import 'package:med_remind_app/domain/model/schedule.dart';
@@ -74,6 +75,7 @@ void main() {
             permissionGateway: FakePermissionGateway(),
             doseNotifier: const NoOpDoseNotifier(),
             reconciliationStateStore: DriftReconciliationStateStore(database),
+            reminderSettingsStore: DriftReminderSettingsStore(database),
           ),
         ),
       );
@@ -122,6 +124,7 @@ void main() {
           permissionGateway: FakePermissionGateway(),
           doseNotifier: const NoOpDoseNotifier(),
           reconciliationStateStore: DriftReconciliationStateStore(database),
+          reminderSettingsStore: DriftReminderSettingsStore(database),
         ),
       ),
     );

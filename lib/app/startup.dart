@@ -26,6 +26,7 @@ import '../domain/port/medicine_repository.dart';
 import '../domain/port/onboarding_state_store.dart';
 import '../domain/port/permission_gateway.dart';
 import '../domain/port/reconciliation_state_store.dart';
+import '../domain/port/reminder_settings_store.dart';
 import '../platform/clock/system_clock.dart';
 import 'clock_provider.dart';
 import 'dose_notifier_provider.dart';
@@ -35,6 +36,7 @@ import 'onboarding_completed_at_startup_provider.dart';
 import 'onboarding_state_store_provider.dart';
 import 'permission_gateway_provider.dart';
 import 'reconciliation_state_store_provider.dart';
+import 'reminder_settings_store_provider.dart';
 
 /// The `dart:developer` log source for startup. Logging is local-only (NFR-6
 /// forbids a crash reporter), so this name is how a developer finds it.
@@ -192,6 +194,13 @@ Future<Clock> resolveClockAtStartup({
 /// `HomePlanController.build()`'s own first act (AD-9) from this story
 /// onward, so a launch with no override would throw the moment Home's
 /// provider first runs, exactly as a missing [permissionGateway] would.
+///
+/// [reminderSettingsStore] is Story 3.9's addition, the ninth binding.
+/// `reminderSettingsStoreProvider` uses the same no-safe-default (throws)
+/// pattern as every port bound above -- `doseGeneratorProvider` and
+/// `doseRecorderProvider` both read it now, so a launch with no override
+/// would throw the moment a Dose is generated or recorded, not merely leave
+/// FR-14's app-wide defaults unreachable.
 List<Override> startupOverrides({
   required OnboardingStateStore store,
   required bool completed,
@@ -201,6 +210,7 @@ List<Override> startupOverrides({
   required PermissionGateway permissionGateway,
   required DoseNotifier doseNotifier,
   required ReconciliationStateStore reconciliationStateStore,
+  required ReminderSettingsStore reminderSettingsStore,
 }) {
   return <Override>[
     onboardingStateStoreProvider.overrideWithValue(store),
@@ -213,6 +223,7 @@ List<Override> startupOverrides({
     reconciliationStateStoreProvider.overrideWithValue(
       reconciliationStateStore,
     ),
+    reminderSettingsStoreProvider.overrideWithValue(reminderSettingsStore),
   ];
 }
 

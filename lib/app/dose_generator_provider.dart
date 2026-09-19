@@ -1,14 +1,17 @@
-// The binding that builds `DoseGenerator` from the two repository ports it
-// composes.
+// The binding that builds `DoseGenerator` from the three ports it composes.
 //
 // AD-13, hand-written: one provider per file, named `<subject>Provider`. Unlike
 // `doseRepositoryProvider`, this one carries no "must be overridden" throw --
 // `DoseGenerator` is not an adapter with a technology choice behind it, it is
-// a domain service built once its two dependencies are bound, exactly the way
-// `routerProvider` composes `onboardingCompletedAtStartupProvider` rather than
-// being bound directly in `startupOverrides`. A test that wants a fake
-// generator overrides `medicineRepositoryProvider`/`doseRepositoryProvider`
-// (or this provider directly with `overrideWithValue`), not this file.
+// a domain service built once its three dependencies are bound, exactly the
+// way `routerProvider` composes `onboardingCompletedAtStartupProvider` rather
+// than being bound directly in `startupOverrides`. A test that wants a fake
+// generator overrides `medicineRepositoryProvider`/`doseRepositoryProvider`/
+// `reminderSettingsStoreProvider` (or this provider directly with
+// `overrideWithValue`), not this file.
+//
+// STORY 3.9 adds `reminderSettingsStoreProvider`, `DoseGenerator`'s third
+// dependency.
 //
 // STORY 1.8 IS THE FIRST CALLER FROM `lib/app/`. `DoseGenerator` itself has
 // existed since Story 1.7b, called only from `lib/domain/service/`'s own
@@ -24,14 +27,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/service/dose_generator.dart';
 import 'dose_repository_provider.dart';
 import 'medicine_repository_provider.dart';
+import 'reminder_settings_store_provider.dart';
 
 /// The [DoseGenerator] the app uses, built over the bound
-/// [medicineRepositoryProvider] and [doseRepositoryProvider].
+/// [medicineRepositoryProvider], [doseRepositoryProvider] and
+/// [reminderSettingsStoreProvider].
 final Provider<DoseGenerator> doseGeneratorProvider = Provider<DoseGenerator>((
   ref,
 ) {
   return DoseGenerator(
     ref.watch(medicineRepositoryProvider),
     ref.watch(doseRepositoryProvider),
+    ref.watch(reminderSettingsStoreProvider),
   );
 });

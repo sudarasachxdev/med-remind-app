@@ -45,11 +45,75 @@ class $AppSettingsTable extends AppSettings
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _remindersEnabledDefaultMeta =
+      const VerificationMeta('remindersEnabledDefault');
+  @override
+  late final GeneratedColumn<bool> remindersEnabledDefault =
+      GeneratedColumn<bool>(
+        'reminders_enabled_default',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("reminders_enabled_default" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  static const VerificationMeta _followUpOffsetMinutes1Meta =
+      const VerificationMeta('followUpOffsetMinutes1');
+  @override
+  late final GeneratedColumn<int> followUpOffsetMinutes1 = GeneratedColumn<int>(
+    'follow_up_offset_minutes1',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(15),
+  );
+  static const VerificationMeta _followUpOffsetMinutes2Meta =
+      const VerificationMeta('followUpOffsetMinutes2');
+  @override
+  late final GeneratedColumn<int> followUpOffsetMinutes2 = GeneratedColumn<int>(
+    'follow_up_offset_minutes2',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(30),
+  );
+  static const VerificationMeta _escalationWindowOverrideMinutesMeta =
+      const VerificationMeta('escalationWindowOverrideMinutes');
+  @override
+  late final GeneratedColumn<int> escalationWindowOverrideMinutes =
+      GeneratedColumn<int>(
+        'escalation_window_override_minutes',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _snoozeIntervalMinutesMeta =
+      const VerificationMeta('snoozeIntervalMinutes');
+  @override
+  late final GeneratedColumn<int> snoozeIntervalMinutes = GeneratedColumn<int>(
+    'snooze_interval_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(15),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     onboardingCompleted,
     lastKnownIanaTimezone,
+    remindersEnabledDefault,
+    followUpOffsetMinutes1,
+    followUpOffsetMinutes2,
+    escalationWindowOverrideMinutes,
+    snoozeIntervalMinutes,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -84,6 +148,51 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('reminders_enabled_default')) {
+      context.handle(
+        _remindersEnabledDefaultMeta,
+        remindersEnabledDefault.isAcceptableOrUnknown(
+          data['reminders_enabled_default']!,
+          _remindersEnabledDefaultMeta,
+        ),
+      );
+    }
+    if (data.containsKey('follow_up_offset_minutes1')) {
+      context.handle(
+        _followUpOffsetMinutes1Meta,
+        followUpOffsetMinutes1.isAcceptableOrUnknown(
+          data['follow_up_offset_minutes1']!,
+          _followUpOffsetMinutes1Meta,
+        ),
+      );
+    }
+    if (data.containsKey('follow_up_offset_minutes2')) {
+      context.handle(
+        _followUpOffsetMinutes2Meta,
+        followUpOffsetMinutes2.isAcceptableOrUnknown(
+          data['follow_up_offset_minutes2']!,
+          _followUpOffsetMinutes2Meta,
+        ),
+      );
+    }
+    if (data.containsKey('escalation_window_override_minutes')) {
+      context.handle(
+        _escalationWindowOverrideMinutesMeta,
+        escalationWindowOverrideMinutes.isAcceptableOrUnknown(
+          data['escalation_window_override_minutes']!,
+          _escalationWindowOverrideMinutesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('snooze_interval_minutes')) {
+      context.handle(
+        _snoozeIntervalMinutesMeta,
+        snoozeIntervalMinutes.isAcceptableOrUnknown(
+          data['snooze_interval_minutes']!,
+          _snoozeIntervalMinutesMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -105,6 +214,26 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.string,
         data['${effectivePrefix}last_known_iana_timezone'],
       ),
+      remindersEnabledDefault: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}reminders_enabled_default'],
+      )!,
+      followUpOffsetMinutes1: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}follow_up_offset_minutes1'],
+      )!,
+      followUpOffsetMinutes2: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}follow_up_offset_minutes2'],
+      )!,
+      escalationWindowOverrideMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}escalation_window_override_minutes'],
+      ),
+      snoozeIntervalMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}snooze_interval_minutes'],
+      )!,
     );
   }
 
@@ -140,10 +269,55 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   /// changed FROM something", which `Reconciler` must not treat as a change to
   /// react to (nothing was generated under a wrong zone to begin with).
   final String? lastKnownIanaTimezone;
+
+  /// Whether a newly-created Schedule reminds by default (FR-14, Story 3.9).
+  ///
+  /// Defaults to `true`, matching [Schedules.remindersEnabled]'s own default
+  /// and `ReminderSettings.freshInstallDefault` -- a fresh install and a row
+  /// inserted for some other setting both mean "reminders on".
+  final bool remindersEnabledDefault;
+
+  /// The first (nearer) follow-up offset in minutes, app-wide
+  /// (`ReminderSettings.followUpOffsetsMinutes[0]`, Story 3.9).
+  ///
+  /// Defaults to 15, matching `defaultFollowUpOffsetsMinutes[0]` and the
+  /// fresh-install default FR-14 names.
+  final int followUpOffsetMinutes1;
+
+  /// The second (final) follow-up offset in minutes, app-wide
+  /// (`ReminderSettings.followUpOffsetsMinutes[1]`, Story 3.9).
+  ///
+  /// Defaults to 30, matching `defaultFollowUpOffsetsMinutes[1]` and the
+  /// fresh-install default FR-14 names.
+  final int followUpOffsetMinutes2;
+
+  /// The app-wide Escalation Window override in minutes, or `null` for
+  /// Automatic (AD-16's own middle rung, Story 3.9).
+  ///
+  /// Nullable, with no default: `null` is a genuinely different fact from any
+  /// real window -- it is what "Automatic" (the AD-20 formula) means, exactly
+  /// as [lastKnownIanaTimezone]'s own `null` means "no run yet" rather than
+  /// some placeholder zone. Stored as plain minutes, not
+  /// [Schedules.reminderOverride]'s `PT#H#M#S` text -- see
+  /// `ReminderSettings`'s own doc comment for why the two rungs of one
+  /// resolution chain do not need one shared encoding to stay consistent.
+  final int? escalationWindowOverrideMinutes;
+
+  /// The app-wide snooze length in minutes (`ReminderSettings
+  /// .snoozeIntervalMinutes`, Story 3.9).
+  ///
+  /// Defaults to 15, matching `defaultSnoozeInterval` and the fresh-install
+  /// default FR-14 names.
+  final int snoozeIntervalMinutes;
   const AppSetting({
     required this.id,
     required this.onboardingCompleted,
     this.lastKnownIanaTimezone,
+    required this.remindersEnabledDefault,
+    required this.followUpOffsetMinutes1,
+    required this.followUpOffsetMinutes2,
+    this.escalationWindowOverrideMinutes,
+    required this.snoozeIntervalMinutes,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -153,6 +327,15 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     if (!nullToAbsent || lastKnownIanaTimezone != null) {
       map['last_known_iana_timezone'] = Variable<String>(lastKnownIanaTimezone);
     }
+    map['reminders_enabled_default'] = Variable<bool>(remindersEnabledDefault);
+    map['follow_up_offset_minutes1'] = Variable<int>(followUpOffsetMinutes1);
+    map['follow_up_offset_minutes2'] = Variable<int>(followUpOffsetMinutes2);
+    if (!nullToAbsent || escalationWindowOverrideMinutes != null) {
+      map['escalation_window_override_minutes'] = Variable<int>(
+        escalationWindowOverrideMinutes,
+      );
+    }
+    map['snooze_interval_minutes'] = Variable<int>(snoozeIntervalMinutes);
     return map;
   }
 
@@ -163,6 +346,14 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       lastKnownIanaTimezone: lastKnownIanaTimezone == null && nullToAbsent
           ? const Value.absent()
           : Value(lastKnownIanaTimezone),
+      remindersEnabledDefault: Value(remindersEnabledDefault),
+      followUpOffsetMinutes1: Value(followUpOffsetMinutes1),
+      followUpOffsetMinutes2: Value(followUpOffsetMinutes2),
+      escalationWindowOverrideMinutes:
+          escalationWindowOverrideMinutes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(escalationWindowOverrideMinutes),
+      snoozeIntervalMinutes: Value(snoozeIntervalMinutes),
     );
   }
 
@@ -179,6 +370,21 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       lastKnownIanaTimezone: serializer.fromJson<String?>(
         json['lastKnownIanaTimezone'],
       ),
+      remindersEnabledDefault: serializer.fromJson<bool>(
+        json['remindersEnabledDefault'],
+      ),
+      followUpOffsetMinutes1: serializer.fromJson<int>(
+        json['followUpOffsetMinutes1'],
+      ),
+      followUpOffsetMinutes2: serializer.fromJson<int>(
+        json['followUpOffsetMinutes2'],
+      ),
+      escalationWindowOverrideMinutes: serializer.fromJson<int?>(
+        json['escalationWindowOverrideMinutes'],
+      ),
+      snoozeIntervalMinutes: serializer.fromJson<int>(
+        json['snoozeIntervalMinutes'],
+      ),
     );
   }
   @override
@@ -190,6 +396,15 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'lastKnownIanaTimezone': serializer.toJson<String?>(
         lastKnownIanaTimezone,
       ),
+      'remindersEnabledDefault': serializer.toJson<bool>(
+        remindersEnabledDefault,
+      ),
+      'followUpOffsetMinutes1': serializer.toJson<int>(followUpOffsetMinutes1),
+      'followUpOffsetMinutes2': serializer.toJson<int>(followUpOffsetMinutes2),
+      'escalationWindowOverrideMinutes': serializer.toJson<int?>(
+        escalationWindowOverrideMinutes,
+      ),
+      'snoozeIntervalMinutes': serializer.toJson<int>(snoozeIntervalMinutes),
     };
   }
 
@@ -197,12 +412,27 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     int? id,
     bool? onboardingCompleted,
     Value<String?> lastKnownIanaTimezone = const Value.absent(),
+    bool? remindersEnabledDefault,
+    int? followUpOffsetMinutes1,
+    int? followUpOffsetMinutes2,
+    Value<int?> escalationWindowOverrideMinutes = const Value.absent(),
+    int? snoozeIntervalMinutes,
   }) => AppSetting(
     id: id ?? this.id,
     onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
     lastKnownIanaTimezone: lastKnownIanaTimezone.present
         ? lastKnownIanaTimezone.value
         : this.lastKnownIanaTimezone,
+    remindersEnabledDefault:
+        remindersEnabledDefault ?? this.remindersEnabledDefault,
+    followUpOffsetMinutes1:
+        followUpOffsetMinutes1 ?? this.followUpOffsetMinutes1,
+    followUpOffsetMinutes2:
+        followUpOffsetMinutes2 ?? this.followUpOffsetMinutes2,
+    escalationWindowOverrideMinutes: escalationWindowOverrideMinutes.present
+        ? escalationWindowOverrideMinutes.value
+        : this.escalationWindowOverrideMinutes,
+    snoozeIntervalMinutes: snoozeIntervalMinutes ?? this.snoozeIntervalMinutes,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
     return AppSetting(
@@ -213,6 +443,22 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       lastKnownIanaTimezone: data.lastKnownIanaTimezone.present
           ? data.lastKnownIanaTimezone.value
           : this.lastKnownIanaTimezone,
+      remindersEnabledDefault: data.remindersEnabledDefault.present
+          ? data.remindersEnabledDefault.value
+          : this.remindersEnabledDefault,
+      followUpOffsetMinutes1: data.followUpOffsetMinutes1.present
+          ? data.followUpOffsetMinutes1.value
+          : this.followUpOffsetMinutes1,
+      followUpOffsetMinutes2: data.followUpOffsetMinutes2.present
+          ? data.followUpOffsetMinutes2.value
+          : this.followUpOffsetMinutes2,
+      escalationWindowOverrideMinutes:
+          data.escalationWindowOverrideMinutes.present
+          ? data.escalationWindowOverrideMinutes.value
+          : this.escalationWindowOverrideMinutes,
+      snoozeIntervalMinutes: data.snoozeIntervalMinutes.present
+          ? data.snoozeIntervalMinutes.value
+          : this.snoozeIntervalMinutes,
     );
   }
 
@@ -221,41 +467,82 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     return (StringBuffer('AppSetting(')
           ..write('id: $id, ')
           ..write('onboardingCompleted: $onboardingCompleted, ')
-          ..write('lastKnownIanaTimezone: $lastKnownIanaTimezone')
+          ..write('lastKnownIanaTimezone: $lastKnownIanaTimezone, ')
+          ..write('remindersEnabledDefault: $remindersEnabledDefault, ')
+          ..write('followUpOffsetMinutes1: $followUpOffsetMinutes1, ')
+          ..write('followUpOffsetMinutes2: $followUpOffsetMinutes2, ')
+          ..write(
+            'escalationWindowOverrideMinutes: $escalationWindowOverrideMinutes, ',
+          )
+          ..write('snoozeIntervalMinutes: $snoozeIntervalMinutes')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, onboardingCompleted, lastKnownIanaTimezone);
+  int get hashCode => Object.hash(
+    id,
+    onboardingCompleted,
+    lastKnownIanaTimezone,
+    remindersEnabledDefault,
+    followUpOffsetMinutes1,
+    followUpOffsetMinutes2,
+    escalationWindowOverrideMinutes,
+    snoozeIntervalMinutes,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is AppSetting &&
           other.id == this.id &&
           other.onboardingCompleted == this.onboardingCompleted &&
-          other.lastKnownIanaTimezone == this.lastKnownIanaTimezone);
+          other.lastKnownIanaTimezone == this.lastKnownIanaTimezone &&
+          other.remindersEnabledDefault == this.remindersEnabledDefault &&
+          other.followUpOffsetMinutes1 == this.followUpOffsetMinutes1 &&
+          other.followUpOffsetMinutes2 == this.followUpOffsetMinutes2 &&
+          other.escalationWindowOverrideMinutes ==
+              this.escalationWindowOverrideMinutes &&
+          other.snoozeIntervalMinutes == this.snoozeIntervalMinutes);
 }
 
 class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<int> id;
   final Value<bool> onboardingCompleted;
   final Value<String?> lastKnownIanaTimezone;
+  final Value<bool> remindersEnabledDefault;
+  final Value<int> followUpOffsetMinutes1;
+  final Value<int> followUpOffsetMinutes2;
+  final Value<int?> escalationWindowOverrideMinutes;
+  final Value<int> snoozeIntervalMinutes;
   const AppSettingsCompanion({
     this.id = const Value.absent(),
     this.onboardingCompleted = const Value.absent(),
     this.lastKnownIanaTimezone = const Value.absent(),
+    this.remindersEnabledDefault = const Value.absent(),
+    this.followUpOffsetMinutes1 = const Value.absent(),
+    this.followUpOffsetMinutes2 = const Value.absent(),
+    this.escalationWindowOverrideMinutes = const Value.absent(),
+    this.snoozeIntervalMinutes = const Value.absent(),
   });
   AppSettingsCompanion.insert({
     this.id = const Value.absent(),
     this.onboardingCompleted = const Value.absent(),
     this.lastKnownIanaTimezone = const Value.absent(),
+    this.remindersEnabledDefault = const Value.absent(),
+    this.followUpOffsetMinutes1 = const Value.absent(),
+    this.followUpOffsetMinutes2 = const Value.absent(),
+    this.escalationWindowOverrideMinutes = const Value.absent(),
+    this.snoozeIntervalMinutes = const Value.absent(),
   });
   static Insertable<AppSetting> custom({
     Expression<int>? id,
     Expression<bool>? onboardingCompleted,
     Expression<String>? lastKnownIanaTimezone,
+    Expression<bool>? remindersEnabledDefault,
+    Expression<int>? followUpOffsetMinutes1,
+    Expression<int>? followUpOffsetMinutes2,
+    Expression<int>? escalationWindowOverrideMinutes,
+    Expression<int>? snoozeIntervalMinutes,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -263,6 +550,16 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         'onboarding_completed': onboardingCompleted,
       if (lastKnownIanaTimezone != null)
         'last_known_iana_timezone': lastKnownIanaTimezone,
+      if (remindersEnabledDefault != null)
+        'reminders_enabled_default': remindersEnabledDefault,
+      if (followUpOffsetMinutes1 != null)
+        'follow_up_offset_minutes1': followUpOffsetMinutes1,
+      if (followUpOffsetMinutes2 != null)
+        'follow_up_offset_minutes2': followUpOffsetMinutes2,
+      if (escalationWindowOverrideMinutes != null)
+        'escalation_window_override_minutes': escalationWindowOverrideMinutes,
+      if (snoozeIntervalMinutes != null)
+        'snooze_interval_minutes': snoozeIntervalMinutes,
     });
   }
 
@@ -270,12 +567,28 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<int>? id,
     Value<bool>? onboardingCompleted,
     Value<String?>? lastKnownIanaTimezone,
+    Value<bool>? remindersEnabledDefault,
+    Value<int>? followUpOffsetMinutes1,
+    Value<int>? followUpOffsetMinutes2,
+    Value<int?>? escalationWindowOverrideMinutes,
+    Value<int>? snoozeIntervalMinutes,
   }) {
     return AppSettingsCompanion(
       id: id ?? this.id,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       lastKnownIanaTimezone:
           lastKnownIanaTimezone ?? this.lastKnownIanaTimezone,
+      remindersEnabledDefault:
+          remindersEnabledDefault ?? this.remindersEnabledDefault,
+      followUpOffsetMinutes1:
+          followUpOffsetMinutes1 ?? this.followUpOffsetMinutes1,
+      followUpOffsetMinutes2:
+          followUpOffsetMinutes2 ?? this.followUpOffsetMinutes2,
+      escalationWindowOverrideMinutes:
+          escalationWindowOverrideMinutes ??
+          this.escalationWindowOverrideMinutes,
+      snoozeIntervalMinutes:
+          snoozeIntervalMinutes ?? this.snoozeIntervalMinutes,
     );
   }
 
@@ -293,6 +606,31 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         lastKnownIanaTimezone.value,
       );
     }
+    if (remindersEnabledDefault.present) {
+      map['reminders_enabled_default'] = Variable<bool>(
+        remindersEnabledDefault.value,
+      );
+    }
+    if (followUpOffsetMinutes1.present) {
+      map['follow_up_offset_minutes1'] = Variable<int>(
+        followUpOffsetMinutes1.value,
+      );
+    }
+    if (followUpOffsetMinutes2.present) {
+      map['follow_up_offset_minutes2'] = Variable<int>(
+        followUpOffsetMinutes2.value,
+      );
+    }
+    if (escalationWindowOverrideMinutes.present) {
+      map['escalation_window_override_minutes'] = Variable<int>(
+        escalationWindowOverrideMinutes.value,
+      );
+    }
+    if (snoozeIntervalMinutes.present) {
+      map['snooze_interval_minutes'] = Variable<int>(
+        snoozeIntervalMinutes.value,
+      );
+    }
     return map;
   }
 
@@ -301,7 +639,14 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     return (StringBuffer('AppSettingsCompanion(')
           ..write('id: $id, ')
           ..write('onboardingCompleted: $onboardingCompleted, ')
-          ..write('lastKnownIanaTimezone: $lastKnownIanaTimezone')
+          ..write('lastKnownIanaTimezone: $lastKnownIanaTimezone, ')
+          ..write('remindersEnabledDefault: $remindersEnabledDefault, ')
+          ..write('followUpOffsetMinutes1: $followUpOffsetMinutes1, ')
+          ..write('followUpOffsetMinutes2: $followUpOffsetMinutes2, ')
+          ..write(
+            'escalationWindowOverrideMinutes: $escalationWindowOverrideMinutes, ',
+          )
+          ..write('snoozeIntervalMinutes: $snoozeIntervalMinutes')
           ..write(')'))
         .toString();
   }
@@ -2807,12 +3152,22 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<int> id,
       Value<bool> onboardingCompleted,
       Value<String?> lastKnownIanaTimezone,
+      Value<bool> remindersEnabledDefault,
+      Value<int> followUpOffsetMinutes1,
+      Value<int> followUpOffsetMinutes2,
+      Value<int?> escalationWindowOverrideMinutes,
+      Value<int> snoozeIntervalMinutes,
     });
 typedef $$AppSettingsTableUpdateCompanionBuilder =
     AppSettingsCompanion Function({
       Value<int> id,
       Value<bool> onboardingCompleted,
       Value<String?> lastKnownIanaTimezone,
+      Value<bool> remindersEnabledDefault,
+      Value<int> followUpOffsetMinutes1,
+      Value<int> followUpOffsetMinutes2,
+      Value<int?> escalationWindowOverrideMinutes,
+      Value<int> snoozeIntervalMinutes,
     });
 
 class $$AppSettingsTableFilterComposer
@@ -2836,6 +3191,31 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<String> get lastKnownIanaTimezone => $composableBuilder(
     column: $table.lastKnownIanaTimezone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get remindersEnabledDefault => $composableBuilder(
+    column: $table.remindersEnabledDefault,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get followUpOffsetMinutes1 => $composableBuilder(
+    column: $table.followUpOffsetMinutes1,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get followUpOffsetMinutes2 => $composableBuilder(
+    column: $table.followUpOffsetMinutes2,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get escalationWindowOverrideMinutes => $composableBuilder(
+    column: $table.escalationWindowOverrideMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get snoozeIntervalMinutes => $composableBuilder(
+    column: $table.snoozeIntervalMinutes,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2863,6 +3243,32 @@ class $$AppSettingsTableOrderingComposer
     column: $table.lastKnownIanaTimezone,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get remindersEnabledDefault => $composableBuilder(
+    column: $table.remindersEnabledDefault,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get followUpOffsetMinutes1 => $composableBuilder(
+    column: $table.followUpOffsetMinutes1,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get followUpOffsetMinutes2 => $composableBuilder(
+    column: $table.followUpOffsetMinutes2,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get escalationWindowOverrideMinutes =>
+      $composableBuilder(
+        column: $table.escalationWindowOverrideMinutes,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<int> get snoozeIntervalMinutes => $composableBuilder(
+    column: $table.snoozeIntervalMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AppSettingsTableAnnotationComposer
@@ -2884,6 +3290,32 @@ class $$AppSettingsTableAnnotationComposer
 
   GeneratedColumn<String> get lastKnownIanaTimezone => $composableBuilder(
     column: $table.lastKnownIanaTimezone,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get remindersEnabledDefault => $composableBuilder(
+    column: $table.remindersEnabledDefault,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get followUpOffsetMinutes1 => $composableBuilder(
+    column: $table.followUpOffsetMinutes1,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get followUpOffsetMinutes2 => $composableBuilder(
+    column: $table.followUpOffsetMinutes2,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get escalationWindowOverrideMinutes =>
+      $composableBuilder(
+        column: $table.escalationWindowOverrideMinutes,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get snoozeIntervalMinutes => $composableBuilder(
+    column: $table.snoozeIntervalMinutes,
     builder: (column) => column,
   );
 }
@@ -2922,20 +3354,44 @@ class $$AppSettingsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<bool> onboardingCompleted = const Value.absent(),
                 Value<String?> lastKnownIanaTimezone = const Value.absent(),
+                Value<bool> remindersEnabledDefault = const Value.absent(),
+                Value<int> followUpOffsetMinutes1 = const Value.absent(),
+                Value<int> followUpOffsetMinutes2 = const Value.absent(),
+                Value<int?> escalationWindowOverrideMinutes =
+                    const Value.absent(),
+                Value<int> snoozeIntervalMinutes = const Value.absent(),
               }) => AppSettingsCompanion(
                 id: id,
                 onboardingCompleted: onboardingCompleted,
                 lastKnownIanaTimezone: lastKnownIanaTimezone,
+                remindersEnabledDefault: remindersEnabledDefault,
+                followUpOffsetMinutes1: followUpOffsetMinutes1,
+                followUpOffsetMinutes2: followUpOffsetMinutes2,
+                escalationWindowOverrideMinutes:
+                    escalationWindowOverrideMinutes,
+                snoozeIntervalMinutes: snoozeIntervalMinutes,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 Value<bool> onboardingCompleted = const Value.absent(),
                 Value<String?> lastKnownIanaTimezone = const Value.absent(),
+                Value<bool> remindersEnabledDefault = const Value.absent(),
+                Value<int> followUpOffsetMinutes1 = const Value.absent(),
+                Value<int> followUpOffsetMinutes2 = const Value.absent(),
+                Value<int?> escalationWindowOverrideMinutes =
+                    const Value.absent(),
+                Value<int> snoozeIntervalMinutes = const Value.absent(),
               }) => AppSettingsCompanion.insert(
                 id: id,
                 onboardingCompleted: onboardingCompleted,
                 lastKnownIanaTimezone: lastKnownIanaTimezone,
+                remindersEnabledDefault: remindersEnabledDefault,
+                followUpOffsetMinutes1: followUpOffsetMinutes1,
+                followUpOffsetMinutes2: followUpOffsetMinutes2,
+                escalationWindowOverrideMinutes:
+                    escalationWindowOverrideMinutes,
+                snoozeIntervalMinutes: snoozeIntervalMinutes,
               ),
           withReferenceMapper: (p0) => p0
               .map(

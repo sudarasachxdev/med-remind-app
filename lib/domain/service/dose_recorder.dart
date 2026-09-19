@@ -2,15 +2,23 @@
 //
 // AD-1: pure Dart, `package:meta/` and `package:timezone/` only, transitively
 // through `Dose`. This file's own imports are `Clock`, `DoseRepository`,
-// `DoseNotifier`, `Dose`, `DomainFailure` and the snooze policy -- ports and
-// sibling domain types, nothing platform-bound.
+// `DoseNotifier`, `ReminderSettingsStore`, `Dose` and `DomainFailure` -- ports
+// and sibling domain types, nothing platform-bound.
 //
 // This is a domain SERVICE, not a policy, matching `DoseGenerator`'s own
-// reasoning: it orchestrates three ports (`Clock`, `DoseRepository`,
-// `DoseNotifier`) rather than computing a pure answer from arguments alone.
-// It never computes a `DoseState` itself -- it writes facts and lets
-// `dose_resolver.dart`'s `resolve()` report them, exactly as this story's
-// Code Map requires.
+// reasoning: it orchestrates four ports (`Clock`, `DoseRepository`,
+// `DoseNotifier`, `ReminderSettingsStore`) rather than computing a pure answer
+// from arguments alone. It never computes a `DoseState` itself -- it writes
+// facts and lets `dose_resolver.dart`'s `resolve()` report them, exactly as
+// this story's Code Map requires.
+//
+// STORY 3.9 adds [_reminderSettings]: [snooze] now reads
+// `ReminderSettings.snoozeIntervalMinutes` fresh on every call instead of the
+// hardcoded `defaultSnoozeInterval` -- matching `snooze_policy.dart`'s own
+// doc comment that every snooze reads the current value, so widening it later
+// changes the next snooze, not a past one. `defaultSnoozeInterval` itself is
+// not deleted: it remains a valid fresh-install/test-fixture default, equal
+// to `ReminderSettings.freshInstallDefault.snoozeIntervalMinutes`.
 //
 // `test/architecture_test.dart`'s AD-4 rule is this story's permanent guard:
 // no other hand-written file under `lib/` may name `takenAt:`, `skippedAt:`,
@@ -23,10 +31,10 @@
 
 import '../model/dose.dart';
 import '../model/domain_failure.dart';
-import '../policy/snooze_policy.dart';
 import '../port/clock.dart';
 import '../port/dose_notifier.dart';
 import '../port/dose_repository.dart';
+import '../port/reminder_settings_store.dart';
 
 /// Records a user's action against a `Dose` -- the only type permitted to
 /// write `takenAt`, `skippedAt`, `snoozedUntil` or `snoozeCount` (AD-4).
@@ -40,14 +48,21 @@ import '../port/dose_repository.dart';
 /// still fails the whole action even though the write already landed --
 /// there is no partial success reported to the caller either way.
 final class DoseRecorder {
-  /// Creates a recorder over [_clock], [_doses] and [_notifier]. All three are
-  /// ports (AD-1): this class never sees a Drift adapter or
-  /// `flutter_local_notifications`, only what each port promises.
-  DoseRecorder(this._clock, this._doses, this._notifier);
+  /// Creates a recorder over [_clock], [_doses], [_notifier] and
+  /// [_reminderSettings]. All four are ports (AD-1): this class never sees a
+  /// Drift adapter or `flutter_local_notifications`, only what each port
+  /// promises.
+  DoseRecorder(
+    this._clock,
+    this._doses,
+    this._notifier,
+    this._reminderSettings,
+  );
 
   final Clock _clock;
   final DoseRepository _doses;
   final DoseNotifier _notifier;
+  final ReminderSettingsStore _reminderSettings;
 
   /// Records [dose] as taken at the current instant.
   ///
@@ -90,16 +105,16 @@ final class DoseRecorder {
     await _notifier.cancelPending(current.id);
   }
 
-  /// Snoozes [dose] for [defaultSnoozeInterval] from the current instant,
-  /// incrementing `snoozeCount` (FR-8: no cap).
+  /// Snoozes [dose] for the live `ReminderSettings.snoozeIntervalMinutes`
+  /// from the current instant, incrementing `snoozeCount` (FR-8: no cap).
   ///
-  /// Refuses with [SnoozeWindowExceededFailure] when `now +
-  /// defaultSnoozeInterval` would fall at or past `dose.scheduledAt +
-  /// dose.window` -- the PRD's own unconditional rule, enforced with the one
-  /// comparison that already covers both a Due Dose about to cross into
-  /// Overdue and one already there (this spec's Design Notes): if `now` is
-  /// already past the boundary, `now + defaultSnoozeInterval` trivially is
-  /// too, so there is no separate "already Overdue" branch.
+  /// Refuses with [SnoozeWindowExceededFailure] when `now + snoozeInterval`
+  /// would fall at or past `dose.scheduledAt + dose.window` -- the PRD's own
+  /// unconditional rule, enforced with the one comparison that already covers
+  /// both a Due Dose about to cross into Overdue and one already there (this
+  /// spec's Design Notes): if `now` is already past the boundary, `now +
+  /// snoozeInterval` trivially is too, so there is no separate "already
+  /// Overdue" branch.
   ///
   /// Also refused under [take]'s two conditions -- a Dose still in the future
   /// is never actionable, and the boundary check alone cannot tell "not due
@@ -114,7 +129,11 @@ final class DoseRecorder {
 
     _checkActionable(current, now);
 
-    final DateTime snoozedUntil = now.add(defaultSnoozeInterval);
+    final int snoozeIntervalMinutes =
+        (await _reminderSettings.load()).snoozeIntervalMinutes;
+    final DateTime snoozedUntil = now.add(
+      Duration(minutes: snoozeIntervalMinutes),
+    );
     final DateTime overdueBoundary = current.scheduledAt.add(current.window);
     if (!snoozedUntil.isBefore(overdueBoundary)) {
       throw SnoozeWindowExceededFailure(current.id);

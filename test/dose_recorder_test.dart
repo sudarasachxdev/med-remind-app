@@ -15,15 +15,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/dose_state.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
+import 'package:med_remind_app/domain/model/reminder_settings.dart';
 import 'package:med_remind_app/domain/model/schedule.dart';
 import 'package:med_remind_app/domain/policy/dose_resolver.dart';
 import 'package:med_remind_app/domain/policy/snooze_policy.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
+import 'package:med_remind_app/domain/port/reminder_settings_store.dart';
 import 'package:med_remind_app/domain/service/dose_recorder.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
@@ -58,6 +61,7 @@ void main() {
   late AppDatabase database;
   late DoseRepository doses;
   late MedicineRepository medicines;
+  late ReminderSettingsStore reminderSettings;
   late Schedule schedule;
   late FakeDoseNotifier notifier;
   late DoseRecorder recorder;
@@ -66,8 +70,9 @@ void main() {
     database = AppDatabase(NativeDatabase.memory());
     doses = DriftDoseRepository(database);
     medicines = DriftMedicineRepository(database);
+    reminderSettings = DriftReminderSettingsStore(database);
     notifier = FakeDoseNotifier();
-    recorder = DoseRecorder(FixedClock(), doses, notifier);
+    recorder = DoseRecorder(FixedClock(), doses, notifier, reminderSettings);
 
     // A real Medicine and Schedule for every Dose below to reference:
     // `doses.schedule_id`/`doses.medicine_id` are enforced foreign keys,
@@ -351,6 +356,33 @@ void main() {
       expect(notifier.cancelled, isEmpty);
     });
 
+    test('Story 3.9: uses the live ReminderSettings snooze length, not the '
+        'hardcoded defaultSnoozeInterval, when they differ', () async {
+      await reminderSettings.save(
+        ReminderSettings.freshInstallDefault.copyWith(snoozeIntervalMinutes: 5),
+      );
+      final Dose dose = buildDose(
+        scheduledLocal: DateTime(2026, 9, 9, 10, 0),
+        escalationWindowMinutes: 120,
+      );
+      await doses.saveDose(dose);
+
+      await recorder.snooze(dose);
+
+      final Dose saved = (await doses.findDose(dose.id))!;
+      expect(
+        saved.snoozedUntil,
+        sameMoment(now.add(const Duration(minutes: 5))),
+      );
+      expect(
+        saved.snoozedUntil,
+        isNot(sameMoment(now.add(defaultSnoozeInterval))),
+        reason:
+            'proves the live setting was actually read, not merely that a '
+            '5-minute value happens to coincide with the hardcoded default',
+      );
+    });
+
     test(
       'already Overdue: refused unconditionally, Overdue stands unchanged',
       () async {
@@ -385,6 +417,7 @@ void main() {
           FixedClock(),
           failing,
           notifier,
+          reminderSettings,
         );
         await doses.saveDose(dose);
         failing.failureToThrow = StateError('write failed');
@@ -411,6 +444,7 @@ void main() {
         FixedClock(),
         doses,
         failingNotifier,
+        reminderSettings,
       );
 
       await expectLater(

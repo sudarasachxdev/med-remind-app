@@ -30,11 +30,13 @@ import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/app/reconciliation_state_store_provider.dart';
+import 'package:med_remind_app/app/reminder_settings_store_provider.dart';
 import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
 import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
@@ -163,6 +165,9 @@ void main() {
           reconciliationStateStoreProvider.overrideWithValue(
             DriftReconciliationStateStore(database),
           ),
+          reminderSettingsStoreProvider.overrideWithValue(
+            DriftReminderSettingsStore(database),
+          ),
         ],
         child: const MaterialApp(home: HomeScreen()),
       ),
@@ -236,6 +241,9 @@ void main() {
           ),
           reconciliationStateStoreProvider.overrideWithValue(
             DriftReconciliationStateStore(database),
+          ),
+          reminderSettingsStoreProvider.overrideWithValue(
+            DriftReminderSettingsStore(database),
           ),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -1452,7 +1460,11 @@ void main() {
         await addSchedule(medicines, medicine.id, timeOfDay: '08:00');
         // The plan's own generation step, run for real so the Dose exists
         // with its true (generated) id before the tap names it.
-        await DoseGenerator(medicines, doses).generate(defaultNow);
+        await DoseGenerator(
+          medicines,
+          doses,
+          DriftReminderSettingsStore(database),
+        ).generate(defaultNow);
         final Dose seeded = (await doses.dosesScheduledBetween(
           DateTime(2026, 9, 9),
           DateTime(2026, 9, 10),
@@ -1470,6 +1482,9 @@ void main() {
               ),
               reconciliationStateStoreProvider.overrideWithValue(
                 DriftReconciliationStateStore(database),
+              ),
+              reminderSettingsStoreProvider.overrideWithValue(
+                DriftReminderSettingsStore(database),
               ),
             ],
             child: const MaterialApp(home: HomeScreen()),
@@ -1502,7 +1517,11 @@ void main() {
         // knows the Dose's real id before `HomePlanController.build()`'s
         // own generation step -- which the widget below still runs on its
         // own -- produces the same row.
-        await DoseGenerator(medicines, doses).generate(defaultNow);
+        await DoseGenerator(
+          medicines,
+          doses,
+          DriftReminderSettingsStore(database),
+        ).generate(defaultNow);
         final Dose seeded = (await doses.dosesScheduledBetween(
           DateTime(2026, 9, 9),
           DateTime(2026, 9, 10),
@@ -1520,6 +1539,9 @@ void main() {
               ),
               reconciliationStateStoreProvider.overrideWithValue(
                 DriftReconciliationStateStore(database),
+              ),
+              reminderSettingsStoreProvider.overrideWithValue(
+                DriftReminderSettingsStore(database),
               ),
             ],
             child: const MaterialApp(home: HomeScreen()),

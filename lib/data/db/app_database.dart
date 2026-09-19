@@ -1,4 +1,4 @@
-// The application database, at schema version 5.
+// The application database, at schema version 6.
 //
 // AD-3 — one process opens the database. One `AppDatabase` is constructed, in
 // `lib/main.dart`, and handed to the adapters that need it. Nothing else calls
@@ -14,15 +14,20 @@
 // receive it until now. Version 5 (Story 3.5) adds
 // [AppSettings.lastKnownIanaTimezone] -- the fact `Reconciler` compares the
 // device's current zone against to detect a device timezone change (AD-9).
-// All four landed by MIGRATING: an installed app already holds a file
-// carrying the user's onboarding flag (and, from v2 onward, real medicines and
-// schedules), and recreating it would be a data-loss bug on the one part of
-// this codebase whose subject is not losing data. So every version has two
-// paths that must agree with each other -- `onCreate` builds every table for
-// a fresh install, `onUpgrade` creates only what a given stored version is
-// missing, and `test/db_migration_test.dart` compares the two resulting
-// schemas against drift's generated fixtures rather than asserting they
-// match.
+// Version 6 (Story 3.9) adds five more [AppSettings] columns --
+// [AppSettings.remindersEnabledDefault], [AppSettings.followUpOffsetMinutes1],
+// [AppSettings.followUpOffsetMinutes2],
+// [AppSettings.escalationWindowOverrideMinutes] and
+// [AppSettings.snoozeIntervalMinutes] -- the app-wide `ReminderSettings` FR-14
+// names, closing AD-16's own "deliberately unreachable" middle rung. All five
+// landed by MIGRATING: an installed app already holds a file carrying the
+// user's onboarding flag (and, from v2 onward, real medicines and schedules),
+// and recreating it would be a data-loss bug on the one part of this codebase
+// whose subject is not losing data. So every version has two paths that must
+// agree with each other -- `onCreate` builds every table for a fresh install,
+// `onUpgrade` creates only what a given stored version is missing, and
+// `test/db_migration_test.dart` compares the two resulting schemas against
+// drift's generated fixtures rather than asserting they match.
 //
 // There is deliberately no `deleteOnFailure`-style recovery: the spine
 // prohibits it (AD-15, AD-18), and a health record with no cloud copy must
@@ -31,11 +36,13 @@
 // Story 1.7a owns `doses`. `DoseRepository`/`DriftDoseRepository` read and
 // write it. Story 3.3 owns `schedules.reminders_enabled` alone -- no new
 // table, no other column. Story 3.5 owns
-// `app_settings.last_known_iana_timezone` alone -- and because `app_settings`
+// `app_settings.last_known_iana_timezone` alone. Story 3.9 owns the five
+// `ReminderSettings` columns on `app_settings` -- and because `app_settings`
 // has existed since v1 (unlike `schedules`, which did not exist until v2),
-// EVERY pre-v5 branch below needs its own `addColumn` for it, not only the
-// newest one -- exactly the same shape Story 3.3's `reminders_enabled`
-// needed across the pre-v4 branches that predated it.
+// EVERY pre-v6 branch below needs its own `addColumn` for all five, not only
+// the newest one -- exactly the same shape Story 3.5's
+// `last_known_iana_timezone` needed across the pre-v5 branches that predated
+// it, and Story 3.3's `reminders_enabled` needed before that.
 
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -96,6 +103,50 @@ class AppSettings extends Table {
   /// changed FROM something", which `Reconciler` must not treat as a change to
   /// react to (nothing was generated under a wrong zone to begin with).
   TextColumn get lastKnownIanaTimezone => text().nullable()();
+
+  /// Whether a newly-created Schedule reminds by default (FR-14, Story 3.9).
+  ///
+  /// Defaults to `true`, matching [Schedules.remindersEnabled]'s own default
+  /// and `ReminderSettings.freshInstallDefault` -- a fresh install and a row
+  /// inserted for some other setting both mean "reminders on".
+  BoolColumn get remindersEnabledDefault =>
+      boolean().withDefault(const Constant(true))();
+
+  /// The first (nearer) follow-up offset in minutes, app-wide
+  /// (`ReminderSettings.followUpOffsetsMinutes[0]`, Story 3.9).
+  ///
+  /// Defaults to 15, matching `defaultFollowUpOffsetsMinutes[0]` and the
+  /// fresh-install default FR-14 names.
+  IntColumn get followUpOffsetMinutes1 =>
+      integer().withDefault(const Constant(15))();
+
+  /// The second (final) follow-up offset in minutes, app-wide
+  /// (`ReminderSettings.followUpOffsetsMinutes[1]`, Story 3.9).
+  ///
+  /// Defaults to 30, matching `defaultFollowUpOffsetsMinutes[1]` and the
+  /// fresh-install default FR-14 names.
+  IntColumn get followUpOffsetMinutes2 =>
+      integer().withDefault(const Constant(30))();
+
+  /// The app-wide Escalation Window override in minutes, or `null` for
+  /// Automatic (AD-16's own middle rung, Story 3.9).
+  ///
+  /// Nullable, with no default: `null` is a genuinely different fact from any
+  /// real window -- it is what "Automatic" (the AD-20 formula) means, exactly
+  /// as [lastKnownIanaTimezone]'s own `null` means "no run yet" rather than
+  /// some placeholder zone. Stored as plain minutes, not
+  /// [Schedules.reminderOverride]'s `PT#H#M#S` text -- see
+  /// `ReminderSettings`'s own doc comment for why the two rungs of one
+  /// resolution chain do not need one shared encoding to stay consistent.
+  IntColumn get escalationWindowOverrideMinutes => integer().nullable()();
+
+  /// The app-wide snooze length in minutes (`ReminderSettings
+  /// .snoozeIntervalMinutes`, Story 3.9).
+  ///
+  /// Defaults to 15, matching `defaultSnoozeInterval` and the fresh-install
+  /// default FR-14 names.
+  IntColumn get snoozeIntervalMinutes =>
+      integer().withDefault(const Constant(15))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -412,9 +463,10 @@ class Doses extends Table {
   ];
 }
 
-/// The Drift database. Schema version 5: [AppSettings] (now with
-/// [AppSettings.lastKnownIanaTimezone], Story 3.5), [Medicines], [Schedules]
-/// (with [Schedules.remindersEnabled], Story 3.3) and [Doses].
+/// The Drift database. Schema version 6: [AppSettings] (with
+/// [AppSettings.lastKnownIanaTimezone], Story 3.5, and its five
+/// `ReminderSettings` columns, Story 3.9), [Medicines], [Schedules] (with
+/// [Schedules.remindersEnabled], Story 3.3) and [Doses].
 @DriftDatabase(tables: [AppSettings, Medicines, Schedules, Doses])
 class AppDatabase extends _$AppDatabase {
   /// Opens the on-device database, or [executor] when one is supplied.
@@ -425,7 +477,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: appDatabaseName));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -458,11 +510,11 @@ class AppDatabase extends _$AppDatabase {
       // named as its own exact pair -- there is no implicit chaining from
       // one step to the next.
       //
-      // `to == 5` for all four pairs below because that is this build's only
+      // `to == 6` for all five pairs below because that is this build's only
       // possible value for it; written literally anyway, matching the exact-
       // pair style the 1 -> 2 step used, so a future story adds a pair rather
       // than relaxing one.
-      if (from == 1 && to == 5) {
+      if (from == 1 && to == 6) {
         // A v1 install (Story 1.3) updating straight to this build, having
         // skipped every version in between. Creates every table added since
         // v1 -- medicines and schedules (Story 1.4), doses (Story 1.7a) --
@@ -470,55 +522,107 @@ class AppDatabase extends _$AppDatabase {
         // between. `createTable(schedules)` builds from TODAY's `Schedules`
         // definition, which already carries `remindersEnabled` (Story 3.3) --
         // there is no separate `addColumn` call for it here, unlike the
-        // 2 -> 5 and 3 -> 5 branches below, because a v1 install never had a
+        // 2 -> 6 and 3 -> 6 branches below, because a v1 install never had a
         // `schedules` table to add the column onto; it gets the full v4 shape
         // in one `createTable`. `app_settings`, unlike `schedules`, DID
         // already exist at v1 -- it is not recreated here, so
-        // `lastKnownIanaTimezone` (Story 3.5) needs its own `addColumn` onto
-        // the pre-existing row shape, exactly as the other three branches do.
+        // `lastKnownIanaTimezone` (Story 3.5) and the five `ReminderSettings`
+        // columns (Story 3.9) each need their own `addColumn` onto the
+        // pre-existing row shape, exactly as the other four branches do.
         await transaction(() async {
           await m.createTable(medicines);
           await m.createTable(schedules);
           await m.createTable(doses);
           await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
+          await m.addColumn(appSettings, appSettings.remindersEnabledDefault);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes1);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes2);
+          await m.addColumn(
+            appSettings,
+            appSettings.escalationWindowOverrideMinutes,
+          );
+          await m.addColumn(appSettings, appSettings.snoozeIntervalMinutes);
         });
         return;
       }
 
-      if (from == 2 && to == 5) {
+      if (from == 2 && to == 6) {
         // A v2 install (Story 1.4 through 1.6): `medicines` and `schedules`
         // already exist, as that version's app actually wrote them -- without
         // `remindersEnabled`, which did not exist yet. `doses` (Story 1.7a) is
         // created fresh, exactly as the old 2 -> 3 step did; `remindersEnabled`
         // is added onto the pre-existing `schedules` row shape, exactly as the
-        // 3 -> 5 step below does for a v3 install, and
-        // `lastKnownIanaTimezone` is added onto the pre-existing
-        // `app_settings` row shape, exactly as every other branch here does.
+        // 3 -> 6 step below does for a v3 install, and `lastKnownIanaTimezone`
+        // plus the five `ReminderSettings` columns are added onto the
+        // pre-existing `app_settings` row shape, exactly as every other branch
+        // here does.
         await transaction(() async {
           await m.createTable(doses);
           await m.addColumn(schedules, schedules.remindersEnabled);
           await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
+          await m.addColumn(appSettings, appSettings.remindersEnabledDefault);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes1);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes2);
+          await m.addColumn(
+            appSettings,
+            appSettings.escalationWindowOverrideMinutes,
+          );
+          await m.addColumn(appSettings, appSettings.snoozeIntervalMinutes);
         });
         return;
       }
 
-      if (from == 3 && to == 5) {
+      if (from == 3 && to == 6) {
         // A v3 install (Story 1.7a through Story 3.2): every table already
-        // exists. Story 3.3's column and Story 3.5's column both land on a
-        // pre-existing row shape.
+        // exists. Story 3.3's column, Story 3.5's column and Story 3.9's five
+        // columns all land on a pre-existing row shape.
         await transaction(() async {
           await m.addColumn(schedules, schedules.remindersEnabled);
           await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
+          await m.addColumn(appSettings, appSettings.remindersEnabledDefault);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes1);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes2);
+          await m.addColumn(
+            appSettings,
+            appSettings.escalationWindowOverrideMinutes,
+          );
+          await m.addColumn(appSettings, appSettings.snoozeIntervalMinutes);
         });
         return;
       }
 
-      if (from == 4 && to == 5) {
+      if (from == 4 && to == 6) {
         // A v4 install (Story 3.3 through Story 3.4): every table and every
-        // column through `remindersEnabled` already exists. This story's one
-        // schema change is the new column.
+        // column through `remindersEnabled` already exists. Story 3.5's column
+        // and this story's five columns land on the pre-existing
+        // `app_settings` row shape.
         await transaction(() async {
           await m.addColumn(appSettings, appSettings.lastKnownIanaTimezone);
+          await m.addColumn(appSettings, appSettings.remindersEnabledDefault);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes1);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes2);
+          await m.addColumn(
+            appSettings,
+            appSettings.escalationWindowOverrideMinutes,
+          );
+          await m.addColumn(appSettings, appSettings.snoozeIntervalMinutes);
+        });
+        return;
+      }
+
+      if (from == 5 && to == 6) {
+        // A v5 install (Story 3.5 through Story 3.8): every table and every
+        // column through `lastKnownIanaTimezone` already exists. This story's
+        // one schema change is its five new columns.
+        await transaction(() async {
+          await m.addColumn(appSettings, appSettings.remindersEnabledDefault);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes1);
+          await m.addColumn(appSettings, appSettings.followUpOffsetMinutes2);
+          await m.addColumn(
+            appSettings,
+            appSettings.escalationWindowOverrideMinutes,
+          );
+          await m.addColumn(appSettings, appSettings.snoozeIntervalMinutes);
         });
         return;
       }

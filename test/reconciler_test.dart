@@ -25,9 +25,11 @@ import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
 import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
+import 'package:med_remind_app/domain/model/reminder_settings.dart';
 import 'package:med_remind_app/domain/model/schedule.dart';
 import 'package:med_remind_app/domain/policy/dose_resolution_policy.dart';
 import 'package:med_remind_app/domain/policy/notification_budget_policy.dart';
@@ -35,6 +37,7 @@ import 'package:med_remind_app/domain/policy/notification_id_policy.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
 import 'package:med_remind_app/domain/port/reconciliation_state_store.dart';
+import 'package:med_remind_app/domain/port/reminder_settings_store.dart';
 import 'package:med_remind_app/domain/service/dose_generator.dart';
 import 'package:med_remind_app/domain/service/reconciler.dart';
 import 'package:med_remind_app/domain/service/reminder_scheduler.dart';
@@ -58,6 +61,7 @@ void main() {
   late MedicineRepository medicines;
   late DoseRepository doses;
   late ReconciliationStateStore reconciliationState;
+  late ReminderSettingsStore reminderSettings;
   late FakeDoseNotifier notifier;
 
   setUp(() {
@@ -66,6 +70,7 @@ void main() {
     medicines = DriftMedicineRepository(database);
     doses = DriftDoseRepository(database);
     reconciliationState = DriftReconciliationStateStore(database);
+    reminderSettings = DriftReminderSettingsStore(database);
     notifier = FakeDoseNotifier();
   });
 
@@ -83,7 +88,7 @@ void main() {
       clock,
       medicines,
       doses,
-      DoseGenerator(medicines, doses),
+      DoseGenerator(medicines, doses, reminderSettings),
       ReminderScheduler(notifier),
       notifier,
       reconciliationState,
@@ -473,6 +478,106 @@ void main() {
             'entirely, not merely left unscheduled',
       );
       expect(notifier.scheduled, isEmpty);
+    });
+  });
+
+  group('Story 3.9: re-stamping through Reconciler.run() (this story\'s own '
+      'proof)', () {
+    /// [original] with [takenAt] set -- standing in for `DoseRecorder`,
+    /// matching `dose_generator_test.dart`'s own `actedOn` helper. Directly
+    /// through the port, since `Reconciler` never records a dose action
+    /// itself.
+    Dose actedOn(Dose original, {required DateTime takenAt}) => Dose(
+      scheduleId: original.scheduleId,
+      medicineId: original.medicineId,
+      scheduledLocal: original.scheduledLocal,
+      ianaTimezone: original.ianaTimezone,
+      takenAt: takenAt,
+      snoozeCount: original.snoozeCount,
+      escalationWindowMinutes: original.escalationWindowMinutes,
+      followUpOffsetsMinutes: original.followUpOffsetsMinutes,
+      medicineName: original.medicineName,
+      dosageAmount: original.dosageAmount,
+      dosageUnit: original.dosageUnit,
+      form: original.form,
+    );
+
+    test('a stored settings change re-stamps an un-acted Dose\'s follow-up '
+        'offsets and escalation window on the next Reconciler.run(), while '
+        'an already-Taken Dose is left exactly as it was', () async {
+      final ReminderSettingsStore settingsStore = DriftReminderSettingsStore(
+        database,
+      );
+      final Medicine medicine = await addMedicine();
+      final Schedule schedule = await addSchedule(medicine.id);
+
+      // Run 1, at the fresh-install default (Automatic, +15/+30).
+      await buildReconciler().run();
+
+      final Dose todayBefore = (await doses.findDose(
+        '${schedule.id}:${DateTime(2026, 9, 9, 8, 0).toIso8601String()}',
+      ))!;
+      expect(todayBefore.followUpOffsetsMinutes, <int>[15, 30, 60]);
+      final int originalWindow = todayBefore.escalationWindowMinutes;
+
+      // Stands in for the user recording today's dose before the settings
+      // change -- this story's own "Doses already recorded are untouched"
+      // acceptance criterion.
+      final Dose recordedToday = actedOn(
+        todayBefore,
+        takenAt: DateTime.utc(2026, 9, 9, 8, 5),
+      );
+      await doses.saveDose(recordedToday);
+
+      final Dose tomorrowBefore = (await doses.findDose(
+        '${schedule.id}:${DateTime(2026, 9, 10, 8, 0).toIso8601String()}',
+      ))!;
+      expect(tomorrowBefore.takenAt, isNull);
+
+      // The only change between the two runs: the stored ReminderSettings.
+      await settingsStore.save(
+        ReminderSettings.freshInstallDefault.copyWith(
+          followUpOffsetsMinutes: <int>[7, 20],
+          escalationWindowOverrideMinutes: 90,
+        ),
+      );
+
+      // Run 2, with no other state change.
+      await buildReconciler().run();
+
+      final Dose? tomorrowAfter = await doses.findDose(tomorrowBefore.id);
+      expect(
+        tomorrowAfter,
+        isNotNull,
+        reason: 'the un-acted Dose must still exist after the second run',
+      );
+      expect(
+        tomorrowAfter!.followUpOffsetsMinutes,
+        <int>[7, 20, 60],
+        reason:
+            'the new settings\' offsets, with the vestigial third slot '
+            'left exactly as it always was',
+      );
+      expect(
+        tomorrowAfter.escalationWindowMinutes,
+        90,
+        reason:
+            'the new app-wide escalation-window override, not whatever the '
+            'AD-20 formula would have computed under Automatic',
+      );
+
+      final Dose? todayAfter = await doses.findDose(recordedToday.id);
+      expect(
+        todayAfter,
+        equals(recordedToday),
+        reason:
+            'a Dose already recorded Taken must not change at all -- not '
+            'its follow-up offsets, not its escalation window, not its '
+            'takenAt -- when the stored settings change and Reconciler.run() '
+            'runs again',
+      );
+      expect(todayAfter!.followUpOffsetsMinutes, <int>[15, 30, 60]);
+      expect(todayAfter.escalationWindowMinutes, originalWindow);
     });
   });
 

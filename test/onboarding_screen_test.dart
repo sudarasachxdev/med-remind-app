@@ -24,12 +24,14 @@ import 'package:med_remind_app/app/onboarding_completed_at_startup_provider.dart
 import 'package:med_remind_app/app/onboarding_state_store_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/app/reconciliation_state_store_provider.dart';
+import 'package:med_remind_app/app/reminder_settings_store_provider.dart';
 import 'package:med_remind_app/app/router.dart';
 import 'package:med_remind_app/app/startup.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
 import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/port/dose_notifier.dart';
 import 'package:med_remind_app/features/home/presentation/home_screen.dart';
 import 'package:med_remind_app/features/onboarding/presentation/escalation_timeline.dart';
@@ -47,6 +49,7 @@ import 'support/unused_dose_notifier.dart';
 import 'support/unused_dose_repository.dart';
 import 'support/unused_medicine_repository.dart';
 import 'support/unused_reconciliation_state_store.dart';
+import 'support/unused_reminder_settings_store.dart';
 import 'support/unused_permission_gateway.dart';
 
 /// The design's reference device frame: 402 x 874 logical pixels (iOS).
@@ -447,6 +450,7 @@ void main() {
             permissionGateway: const UnusedPermissionGateway(),
             doseNotifier: const UnusedDoseNotifier(),
             reconciliationStateStore: const UnusedReconciliationStateStore(),
+            reminderSettingsStore: const UnusedReminderSettingsStore(),
           ),
         ),
       );
@@ -485,6 +489,7 @@ void main() {
             permissionGateway: const UnusedPermissionGateway(),
             doseNotifier: const UnusedDoseNotifier(),
             reconciliationStateStore: const UnusedReconciliationStateStore(),
+            reminderSettingsStore: const UnusedReminderSettingsStore(),
           ),
         ),
       );
@@ -978,6 +983,9 @@ Future<FakeOnboardingStateStore> _pumpApp(
         doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
         reconciliationStateStoreProvider.overrideWithValue(
           DriftReconciliationStateStore(database),
+        ),
+        reminderSettingsStoreProvider.overrideWithValue(
+          DriftReminderSettingsStore(database),
         ),
       ],
     ),

@@ -26,10 +26,12 @@ import 'package:med_remind_app/app/dose_repository_provider.dart';
 import 'package:med_remind_app/app/medicine_repository_provider.dart';
 import 'package:med_remind_app/app/permission_gateway_provider.dart';
 import 'package:med_remind_app/app/reconciliation_state_store_provider.dart';
+import 'package:med_remind_app/app/reminder_settings_store_provider.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
 import 'package:med_remind_app/data/repository/drift_reconciliation_state_store.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/dose_state.dart';
 import 'package:med_remind_app/domain/port/clock.dart';
@@ -46,6 +48,7 @@ import 'package:med_remind_app/features/home/application/home_plan_controller.da
 import 'package:timezone/data/latest.dart' as tzdata;
 
 import 'support/fake_permission_gateway.dart';
+import 'support/fake_reminder_settings_store.dart';
 import 'support/fixed_clock.dart';
 
 void main() {
@@ -97,6 +100,9 @@ void main() {
         doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
         reconciliationStateStoreProvider.overrideWithValue(
           DriftReconciliationStateStore(database),
+        ),
+        reminderSettingsStoreProvider.overrideWithValue(
+          DriftReminderSettingsStore(database),
         ),
       ],
     );
@@ -164,6 +170,7 @@ void main() {
       FixedClock(instant: now),
       doses,
       const NoOpDoseNotifier(),
+      FakeReminderSettingsStore(),
     );
     await action(recorder, dose);
   }
@@ -196,6 +203,12 @@ void main() {
         // nothing either.
         reconciliationStateStoreProvider.overrideWithValue(
           _InMemoryReconciliationStateStore(),
+        ),
+        // Same reasoning as the reconciliation store above -- a fresh
+        // instance at the fresh-install default each remount, not this
+        // file's own concern.
+        reminderSettingsStoreProvider.overrideWithValue(
+          FakeReminderSettingsStore(),
         ),
       ],
     );
@@ -497,6 +510,9 @@ void main() {
               doseNotifierProvider.overrideWithValue(const NoOpDoseNotifier()),
               reconciliationStateStoreProvider.overrideWithValue(
                 _InMemoryReconciliationStateStore(),
+              ),
+              reminderSettingsStoreProvider.overrideWithValue(
+                FakeReminderSettingsStore(),
               ),
             ],
           );

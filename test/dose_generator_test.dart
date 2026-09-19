@@ -15,12 +15,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:med_remind_app/data/db/app_database.dart';
 import 'package:med_remind_app/data/repository/drift_dose_repository.dart';
 import 'package:med_remind_app/data/repository/drift_medicine_repository.dart';
+import 'package:med_remind_app/data/repository/drift_reminder_settings_store.dart';
 import 'package:med_remind_app/domain/model/dose.dart';
 import 'package:med_remind_app/domain/model/frequency.dart';
 import 'package:med_remind_app/domain/model/medicine.dart';
+import 'package:med_remind_app/domain/model/reminder_settings.dart';
 import 'package:med_remind_app/domain/model/schedule.dart';
 import 'package:med_remind_app/domain/port/dose_repository.dart';
 import 'package:med_remind_app/domain/port/medicine_repository.dart';
+import 'package:med_remind_app/domain/port/reminder_settings_store.dart';
 import 'package:med_remind_app/domain/service/dose_generator.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
@@ -33,6 +36,7 @@ void main() {
   late RecordingInterceptor recorder;
   late DoseRepository doses;
   late MedicineRepository medicines;
+  late ReminderSettingsStore reminderSettings;
   late DoseGenerator generator;
   late int nextId;
 
@@ -45,7 +49,8 @@ void main() {
       database,
       newId: () => 'id-${++nextId}',
     );
-    generator = DoseGenerator(medicines, doses);
+    reminderSettings = DriftReminderSettingsStore(database);
+    generator = DoseGenerator(medicines, doses, reminderSettings);
   });
 
   tearDown(() async {
@@ -501,6 +506,89 @@ void main() {
       final List<Dose> all = await doses.dosesForSchedule(overridden.id);
       expect(all, hasLength(14));
       expect(all.every((Dose d) => d.escalationWindowMinutes == 10), isTrue);
+    });
+  });
+
+  group('Story 3.9: live ReminderSettings feed generation', () {
+    test(
+      'a Dose carries the live follow-up offsets, not the hardcoded '
+      'constant, when settings differ from the fresh-install default',
+      () async {
+        await reminderSettings.save(
+          ReminderSettings.freshInstallDefault.copyWith(
+            followUpOffsetsMinutes: <int>[5, 12],
+          ),
+        );
+        final Medicine medicine = await addMedicine();
+        final Schedule schedule = await addSchedule(medicineId: medicine.id);
+
+        await generator.generate(now);
+
+        final List<Dose> all = await doses.dosesForSchedule(schedule.id);
+        expect(all, isNotEmpty);
+        expect(
+          all.every(
+            (Dose d) =>
+                d.followUpOffsetsMinutes[0] == 5 &&
+                d.followUpOffsetsMinutes[1] == 12 &&
+                // The vestigial third slot is untouched -- spliced back in
+                // from the constant, not made configurable.
+                d.followUpOffsetsMinutes[2] == 60,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('AD-16 rung 2: an app-wide escalation-window override applies when '
+        'no per-Schedule override exists', () async {
+      await reminderSettings.save(
+        ReminderSettings.freshInstallDefault.copyWith(
+          escalationWindowOverrideMinutes: 45,
+        ),
+      );
+      final Medicine medicine = await addMedicine();
+      // Two Schedules 12h apart would otherwise formula-compute to 3h
+      // (180 min) -- proving the app-wide override, not a coincidental
+      // formula result, is what ends up on the Dose.
+      final Schedule morning = await addSchedule(
+        medicineId: medicine.id,
+        timeOfDay: '08:00',
+      );
+      await addSchedule(medicineId: medicine.id, timeOfDay: '20:00');
+
+      await generator.generate(now);
+
+      final List<Dose> all = await doses.dosesForSchedule(morning.id);
+      expect(all, isNotEmpty);
+      expect(all.every((Dose d) => d.escalationWindowMinutes == 45), isTrue);
+    });
+
+    test('AD-16 rung order: a per-Schedule override still wins over a '
+        'real, non-null app-wide one', () async {
+      await reminderSettings.save(
+        ReminderSettings.freshInstallDefault.copyWith(
+          escalationWindowOverrideMinutes: 45,
+        ),
+      );
+      final Medicine medicine = await addMedicine();
+      final Schedule overridden = await addSchedule(
+        medicineId: medicine.id,
+        timeOfDay: '08:00',
+        reminderOverride: 'PT10M',
+      );
+
+      await generator.generate(now);
+
+      final List<Dose> all = await doses.dosesForSchedule(overridden.id);
+      expect(all, isNotEmpty);
+      expect(
+        all.every((Dose d) => d.escalationWindowMinutes == 10),
+        isTrue,
+        reason:
+            'the per-Schedule override (rung 1) must win over the app-wide '
+            'one (rung 2), not merely over the formula (rung 3)',
+      );
     });
   });
 }

@@ -16,11 +16,10 @@
 // per call site.
 //
 // AD-16's full order is per-Schedule override -> app-wide override -> this
-// formula. `app_settings` holds only `onboardingCompleted` (no `ReminderSettings`
-// storage exists until FR-14's own story), so the middle rung has nowhere to
-// live yet -- `effectiveEscalationWindow` implements the first and third rungs
-// and leaves the middle named and unreachable, per spec-1-7b's own Boundaries
-// and `deferred-work.md`, rather than inventing a home for it.
+// formula. Story 3.9 reaches the middle rung: [effectiveEscalationWindow]'s
+// own [DoseGenerator] caller now loads `ReminderSettings` and passes its
+// `escalationWindowOverrideMinutes` through as [appWideOverride], closing the
+// gap spec-1-7b's own Boundaries and `deferred-work.md` named.
 
 import '../model/schedule.dart';
 import 'dose_resolution_policy.dart';
@@ -135,17 +134,20 @@ Duration? parseReminderOverride(String? raw) {
 
 /// Resolves the effective Escalation Window for a Dose of [schedule] due at
 /// [current], per AD-16's fixed order -- the "one domain function" the
-/// architecture names, and the file comment above for why only two of its
-/// three rungs are reachable today:
+/// architecture names:
 ///
 ///   1. [schedule]'s own [Schedule.reminderOverride], parsed by
 ///      [parseReminderOverride] -- used exactly as written, with no further
 ///      clamping. [clampEscalationWindow] belongs to the FORMULA (rung 3);
-///      an explicit override is a deliberate value a person set, once
-///      FR-14 ships a surface to set it, and silently narrowing it would
-///      overrule their stated choice rather than compute one for them.
-///   2. An app-wide override -- deliberately unreachable; see the file
-///      comment.
+///      an explicit override is a deliberate value a person set, and
+///      silently narrowing it would overrule their stated choice rather
+///      than compute one for them.
+///   2. [appWideOverride] -- FR-14's app-wide Escalation Window setting
+///      (`ReminderSettings.escalationWindowOverrideMinutes`), `null` for
+///      Automatic. Used exactly as given, with the same no-further-clamping
+///      reasoning as rung 1: a person set it (Story 3.9's own caller,
+///      `DoseGenerator`, loads the live `ReminderSettings` and converts its
+///      minutes to a `Duration` before calling this function).
 ///   3. [escalationWindowFor]'s formula, or [escalationWindowMaximum] when
 ///      [current] is its Medicine's genuinely last-ever occurrence and
 ///      [candidates] holds nothing later of the same Medicine -- this
@@ -156,9 +158,12 @@ Duration effectiveEscalationWindow({
   required Schedule schedule,
   required DoseOccurrence current,
   required Iterable<DoseOccurrence> candidates,
+  Duration? appWideOverride,
 }) {
   final Duration? override = parseReminderOverride(schedule.reminderOverride);
   if (override != null) return override;
+
+  if (appWideOverride != null) return appWideOverride;
 
   final bool hasLater = candidates.any(
     (DoseOccurrence candidate) =>

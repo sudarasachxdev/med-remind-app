@@ -11,41 +11,53 @@
 // never imported here: loading the zone database is the composition root's
 // job and the test suite's `setUp`, never a domain file's own.
 //
-// This is a domain SERVICE, not a policy: it orchestrates two ports
-// (`MedicineRepository`, `DoseRepository`) rather than computing a pure
-// answer from arguments alone, which is why it lives in `domain/service/`
-// rather than beside `schedule_occurrence_policy.dart`, the pure function it
-// calls. Depending on a port is not an AD-1 violation -- `AddMedicineController`
-// already depends on `MedicineRepository` the same way, and neither ever
-// imports a Drift adapter.
+// This is a domain SERVICE, not a policy: it orchestrates three ports
+// (`MedicineRepository`, `DoseRepository`, `ReminderSettingsStore`) rather
+// than computing a pure answer from arguments alone, which is why it lives in
+// `domain/service/` rather than beside `schedule_occurrence_policy.dart`, the
+// pure function it calls. Depending on a port is not an AD-1 violation --
+// `AddMedicineController` already depends on `MedicineRepository` the same
+// way, and neither ever imports a Drift adapter.
 //
 // STORY 1.7B ENDS HERE, exactly as Story 1.6 and 1.7a ended at a policy and a
 // port with no caller. No `Reconciler` exists yet to call `generate()`
 // (Epic 3, AD-9) -- `test/story_scope_test.dart` guards the composition root
 // against an early binding.
+//
+// STORY 3.9 adds [_reminderSettings]: `generate`/[regenerateAfterScheduleChange]
+// each load the live `ReminderSettings` once per call and thread
+// `followUpOffsetsMinutes` and the app-wide escalation-window override down to
+// [_upsert] -- see this story's own "load-bearing fact": [_upsert] already
+// overwrites an existing un-acted Dose's frozen values on every call, so
+// sourcing them from live settings instead of hardcoded constants is the
+// entire re-stamping mechanism FR-14 needs, with no new logic of its own.
 
 import 'package:timezone/timezone.dart' as tz;
 
 import '../model/dose.dart';
 import '../model/frequency.dart';
 import '../model/medicine.dart';
+import '../model/reminder_settings.dart';
 import '../model/schedule.dart';
 import '../policy/dose_resolution_policy.dart';
 import '../policy/escalation_window_policy.dart';
 import '../policy/schedule_occurrence_policy.dart';
 import '../port/dose_repository.dart';
 import '../port/medicine_repository.dart';
+import '../port/reminder_settings_store.dart';
 
 /// Sweeps every active Medicine's Schedules to the rolling horizon, and
 /// rebuilds one Schedule's future Doses after its shape changes.
 final class DoseGenerator {
-  /// Creates a generator over [_medicines] and [_doses]. Both are ports
-  /// (AD-1): this class never sees a Drift adapter, only what
-  /// `MedicineRepository` and `DoseRepository` promise.
-  DoseGenerator(this._medicines, this._doses);
+  /// Creates a generator over [_medicines], [_doses] and
+  /// [_reminderSettings]. All three are ports (AD-1): this class never sees a
+  /// Drift adapter, only what `MedicineRepository`, `DoseRepository` and
+  /// `ReminderSettingsStore` promise.
+  DoseGenerator(this._medicines, this._doses, this._reminderSettings);
 
   final MedicineRepository _medicines;
   final DoseRepository _doses;
+  final ReminderSettingsStore _reminderSettings;
 
   /// Generates every Dose due within [doseResolveWindowDays] of [now], for
   /// every Medicine with [Medicine.active] `true`.
@@ -63,9 +75,10 @@ final class DoseGenerator {
   /// Medicine's existing future Doses is [regenerateAfterScheduleChange]'s job,
   /// since pausing is itself one of AD-10's three cleanup triggers.
   Future<void> generate(DateTime now) async {
+    final ReminderSettings settings = await _reminderSettings.load();
     for (final Medicine medicine in await _medicines.allMedicines()) {
       if (!medicine.active) continue;
-      await _generateForMedicine(medicine, now);
+      await _generateForMedicine(medicine, now, settings);
     }
   }
 
@@ -119,14 +132,19 @@ final class DoseGenerator {
     );
     if (medicine == null || !medicine.active) return;
 
-    await _generateForMedicine(medicine, now);
+    final ReminderSettings settings = await _reminderSettings.load();
+    await _generateForMedicine(medicine, now, settings);
   }
 
   /// The sweep for one Medicine, assumed already checked active by the
   /// caller. Shared by [generate] and [regenerateAfterScheduleChange] so the
   /// two never compute an escalation window differently for the same
   /// Medicine.
-  Future<void> _generateForMedicine(Medicine medicine, DateTime now) async {
+  Future<void> _generateForMedicine(
+    Medicine medicine,
+    DateTime now,
+    ReminderSettings settings,
+  ) async {
     final List<Schedule> schedules = await _medicines.schedulesFor(medicine.id);
     if (schedules.isEmpty) return;
 
@@ -199,6 +217,7 @@ final class DoseGenerator {
           schedule: schedule,
           local: local,
           pool: pool,
+          settings: settings,
         );
       }
     }
@@ -206,25 +225,39 @@ final class DoseGenerator {
 
   /// Writes one occurrence, unless a stored Dose on its natural key has
   /// already been acted on or is currently snoozed (AD-10).
+  ///
+  /// This is the re-stamping mechanism FR-14 needs (this file's own header
+  /// comment): an existing un-acted Dose's [Dose.escalationWindowMinutes] and
+  /// [Dose.followUpOffsetsMinutes] are overwritten with freshly-computed
+  /// values on every call, so sourcing them from [settings] rather than a
+  /// hardcoded constant is what makes a live Settings change reach a Dose the
+  /// next time `Reconciler.run()` calls [generate] -- no separate "re-stamp"
+  /// code path exists or is needed.
   Future<void> _upsert({
     required Medicine medicine,
     required Schedule schedule,
     required DateTime local,
     required List<DoseOccurrence> pool,
+    required ReminderSettings settings,
   }) async {
     final String id = _idFor(schedule.id, local);
     final Dose? existing = await _doses.findDose(id);
     if (existing != null && _isActedOnOrSnoozed(existing)) return;
 
     final DateTime instant = _instantOf(local, schedule.ianaTimezone);
+    final int? appWideOverrideMinutes =
+        settings.escalationWindowOverrideMinutes;
     // AD-16's full resolution order -- schedule's own override, then the
-    // AD-20 formula (with this spec's ceiling completion for a Medicine's
-    // genuinely last-ever occurrence); see `effectiveEscalationWindow`'s own
-    // doc comment for why the middle, app-wide rung is not reachable here.
+    // app-wide override (Story 3.9's own live-settings value, `null` for
+    // Automatic), then the AD-20 formula (with this spec's ceiling completion
+    // for a Medicine's genuinely last-ever occurrence).
     final Duration window = effectiveEscalationWindow(
       schedule: schedule,
       current: (medicineId: medicine.id, scheduledAt: instant),
       candidates: pool,
+      appWideOverride: appWideOverrideMinutes == null
+          ? null
+          : Duration(minutes: appWideOverrideMinutes),
     );
 
     await _doses.saveDose(
@@ -238,6 +271,15 @@ final class DoseGenerator {
         // a CURRENTLY-active snooze skips the write entirely, above.
         snoozeCount: existing?.snoozeCount ?? 0,
         escalationWindowMinutes: window.inMinutes,
+        // The two live, user-configurable offsets from `settings`, with the
+        // vestigial third slot spliced back in from the untouched constant --
+        // see `ReminderSettings`'s own doc comment and `dose.dart`'s
+        // `followUpOffsetsMinutes` for why only indices [0]/[1] are real.
+        followUpOffsetsMinutes: <int>[
+          settings.followUpOffsetsMinutes[0],
+          settings.followUpOffsetsMinutes[1],
+          defaultFollowUpOffsetsMinutes[2],
+        ],
         medicineName: medicine.name,
         dosageAmount: schedule.dosageAmount,
         dosageUnit: medicine.dosageUnit,
